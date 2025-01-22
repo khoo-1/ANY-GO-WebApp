@@ -1,0 +1,32 @@
+{% extends 'erp/base.html' %}
+
+{% block title %}确认批量上传产品{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">确认批量上传产品</h2>
+    <form method="post" action="{% url 'save_bulk_upload' %}">
+        {% csrf_token %}
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>SKU</th>
+                    <th>中文名称</th>
+                    <th>数量</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in data %}
+                <tr>
+                    <td><input type="text" name="sku" value="{{ item.sku }}" class="form-control"></td>
+                    <td><input type="text" name="chinese_name" value="{{ item.中文名称 }}" class="form-control"></td>
+                    <td><input type="number" name="quantity" value="{{ item.数量 }}" class="form-control"></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <input type="hidden" name="data" value="{{ data|escapejs }}">
+        <button type="submit" class="btn btn-primary">保存</button>
+    </form>
+</div>
+{% endblock %}

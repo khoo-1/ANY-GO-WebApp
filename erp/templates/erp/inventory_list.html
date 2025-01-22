@@ -1,0 +1,18 @@
+<!-- filepath: /C:/Users/khoo_/Desktop/ANY-GO网页应用/ecommerce_project/erp/templates/erp/inventory_list.html -->
+{% extends "erp/base.html" %}
+
+{% block title %}库存列表{% endblock %}
+
+{% block content %}
+<h1>库存列表</h1>
+<ul>
+    {% for inventory in inventories %}
+        <li>
+            <strong>产品 SKU:</strong> {{ inventory.product.sku }}<br>
+            <strong>产品名称:</strong> {{ inventory.product.name }}<br>
+            <strong>库存:</strong> {{ inventory.stock }}<br>
+            <strong>仓库:</strong> {{ inventory.warehouse.name }}<br>
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}

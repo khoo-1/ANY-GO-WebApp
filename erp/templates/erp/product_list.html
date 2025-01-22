@@ -1,0 +1,93 @@
+<!-- filepath: /C:/Users/khoo_/Desktop/ANY-GO-WebApp/erp/templates/erp/product_list.html -->
+{% extends "erp/base.html" %}
+
+{% block title %}产品列表{% endblock %}
+
+{% block content %}
+<h2>产品列表</h2>
+<div class="row mb-3">
+    <div class="col-md-6">
+        <form method="get" action="{% url 'product_list' %}" class="form-inline">
+            <input type="text" name="q" class="form-control mr-2" placeholder="搜索产品..." value="{{ request.GET.q }}">
+            <button type="submit" class="btn btn-primary">搜索</button>
+        </form>
+    </div>
+    <div class="col-md-6 text-right">
+        <a href="{% url 'export_products' %}" class="btn btn-success">导出为 Excel</a>
+    </div>
+</div>
+
+<table class="table table-striped table-bordered">
+    <thead>
+        <tr>
+            <th>SKU</th>
+            <th>中文名称</th>
+            <th>英文名称</th>
+            <th>描述</th>
+            <th>价格</th>
+            <th>SPU</th>
+            <th>类别</th>
+            <th>供应商</th>
+            <th>品牌</th>
+            <th>重量</th>
+            <th>体积</th>
+            <th>状态</th>
+            <th>图片</th>
+            <th>库存</th>
+            <th>创建时间</th>
+            <th>更新时间</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in page_obj %}
+        <tr>
+            <td>{{ product.sku }}</td>
+            <td>{{ product.chinese_name }}</td>
+            <td>{{ product.name }}</td>
+            <td>{{ product.description }}</td>
+            <td>${{ product.price }}</td>
+            <td>{{ product.spu }}</td>
+            <td>{{ product.category }}</td>
+            <td>{{ product.supplier }}</td>
+            <td>{{ product.brand }}</td>
+            <td>{{ product.weight }}</td>
+            <td>{{ product.volume }}</td>
+            <td>{{ product.status }}</td>
+            <td>
+                {% if product.image %}
+                    <img src="{{ product.image.url }}" alt="{{ product.name }}" width="50">
+                {% else %}
+                    无图片
+                {% endif %}
+            </td>
+            <td>{{ product.stock }}</td>
+            <td>{{ product.created_at }}</td>
+            <td>{{ product.updated_at }}</td>
+            <td>
+                <a href="{% url 'edit_product' product.id %}">编辑</a> |
+                <a href="{% url 'delete_product' product.id %}">删除</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="pagination">
+    <span class="step-links">
+        {% if page_obj.has_previous %}
+            <a href="?page=1{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">&laquo; 第一页</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">上一页</a>
+        {% endif %}
+
+        <span class="current">
+            第 {{ page_obj.number }} 页，共 {{ page_obj.paginator.num_pages }} 页
+        </span>
+
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">下一页</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">最后一页 &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+<!-- filepath: /C:/Users/khoo_/Desktop/ANY-GO-WebApp/erp/templates/erp/base.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}ANY-GO 办公系统{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <a class="navbar-brand" href="#">ANY-GO 办公系统</a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav mr-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'product_list' %}">产品列表</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'order_list' %}">订单列表</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'inventory_list' %}">库存列表</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'packing_list' %}">装箱单</a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        导入数据
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="navbarDropdown">
+                        <a class="dropdown-item" href="{% url 'add_product' %}">单个产品导入</a>
+                        <a class="dropdown-item" href="{% url 'bulk_upload' %}">装箱单导入</a>
+                        <a class="dropdown-item" href="{% url 'bulk_product_upload' %}">批量产品导入</a>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </nav>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                {% block content %}
+                {% endblock %}
+            </div>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>

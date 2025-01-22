@@ -1,0 +1,20 @@
+<!-- filepath: /C:/Users/khoo_/Desktop/ANY-GO-WebApp/erp/templates/erp/order_list.html -->
+{% extends "erp/base.html" %}
+
+{% block title %}订单列表{% endblock %}
+
+{% block content %}
+<h1>订单列表</h1>
+<ul>
+    {% for order in orders %}
+        <li>
+            <strong>订单 ID:</strong> {{ order.id }}<br>
+            <strong>产品:</strong> {{ order.product.name }}<br>
+            <strong>数量:</strong> {{ order.quantity }}<br>
+            <strong>客户:</strong> {{ order.customer_name }}<br>
+            <strong>地址:</strong> {{ order.customer_address }}<br>
+            <strong>订单日期:</strong> {{ order.order_date }}<br>
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}

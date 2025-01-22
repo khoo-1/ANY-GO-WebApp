@@ -1,0 +1,17 @@
+{% extends 'erp/base.html' %}
+
+{% block title %}批量导入产品{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>批量导入产品</h2>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="file">选择Excel文件：</label>
+            <input type="file" class="form-control-file" id="file" name="file" accept=".xlsx,.xls">
+        </div>
+        <button type="submit" class="btn btn-primary">上传</button>
+    </form>
+</div>
+{% endblock %}

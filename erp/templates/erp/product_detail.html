@@ -1,0 +1,74 @@
+<h2>产品详情</h2>
+<table class="table">
+    <tr>
+        <th>SKU</th>
+        <td>{{ product.sku }}</td>
+    </tr>
+    <tr>
+        <th>中文名称</th>
+        <td>{{ product.chinese_name }}</td>
+    </tr>
+    <tr>
+        <th>英文名称</th>
+        <td>{{ product.name }}</td>
+    </tr>
+    <tr>
+        <th>描述</th>
+        <td>{{ product.description }}</td>
+    </tr>
+    <tr>
+        <th>价格</th>
+        <td>${{ product.price }}</td>
+    </tr>
+    <tr>
+        <th>SPU</th>
+        <td>{{ product.spu }}</td>
+    </tr>
+    <tr>
+        <th>类别</th>
+        <td>{{ product.category }}</td>
+    </tr>
+    <tr>
+        <th>供应商</th>
+        <td>{{ product.supplier }}</td>
+    </tr>
+    <tr>
+        <th>品牌</th>
+        <td>{{ product.brand }}</td>
+    </tr>
+    <tr>
+        <th>重量</th>
+        <td>{{ product.weight }}</td>
+    </tr>
+    <tr>
+        <th>体积</th>
+        <td>{{ product.volume }}</td>
+    </tr>
+    <tr>
+        <th>状态</th>
+        <td>{{ product.status }}</td>
+    </tr>
+    <tr>
+        <th>图片</th>
+        <td>
+            {% if product.image %}
+                <img src="{{ product.image.url }}" alt="{{ product.name }}" width="100">
+            {% else %}
+                无图片
+            {% endif %}
+        </td>
+    </tr>
+    <tr>
+        <th>库存</th>
+        <td>{{ product.stock }}</td>
+    </tr>
+    <tr>
+        <th>创建时间</th>
+        <td>{{ product.created_at }}</td>
+    </tr>
+    <tr>
+        <th>更新时间</th>
+        <td>{{ product.updated_at }}</td>
+    </tr>
+</table>
+<a href="{% url 'product_list' %}">返回产品列表</a>
