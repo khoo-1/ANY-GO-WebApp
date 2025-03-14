@@ -72,7 +72,7 @@ def add_product(request):
         form = ProductForm()
     return render(request, 'erp/add_product.html', {'form': form})
 
-def bulk_product_upload(request):
+def bulk_upload(request, template_name='erp/bulk_upload.html'):
     if request.method == 'POST':
         excel_file = request.FILES['file']
         upload_dir = 'uploads'
@@ -126,7 +126,11 @@ def bulk_product_upload(request):
         os.remove(file_path)  # 删除上传的文件
         return redirect('product_list')
         
-    return render(request, 'erp/bulk_product_upload.html')
+    return render(request, template_name)
+
+# 为了保持向后兼容性，保留bulk_product_upload函数但复用bulk_upload的逻辑
+def bulk_product_upload(request):
+    return bulk_upload(request, template_name='erp/bulk_product_upload.html')
 
 def save_bulk_upload(request):
     if request.method == 'POST':
