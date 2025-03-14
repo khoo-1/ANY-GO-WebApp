@@ -4,7 +4,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.http import HttpResponse
 from .forms import ProductForm
-from .models import Product, Order, Inventory, PackingList, PackingListItem
+from .models import Product, Inventory, PackingList, PackingListItem
 import subprocess
 import os
 import json
@@ -193,10 +193,6 @@ def delete_product(request, pk):
         product.delete()
         return redirect('product_list')
     return render(request, 'erp/delete_product.html', {'product': product})
-
-def order_list(request):
-    orders = Order.objects.all()
-    return render(request, 'erp/order_list.html', {'orders': orders})
 
 def inventory_list(request):
     inventories = Inventory.objects.all()

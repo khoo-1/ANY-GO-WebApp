@@ -33,15 +33,6 @@ class Inventory(models.Model):
     def __str__(self):
         return f"{self.product.sku} in {self.warehouse.name}"  # 返回产品SKU和仓库名称作为字符串表示
 
-class Order(models.Model):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)  # 关联的产品，外键，级联删除
-    quantity = models.IntegerField()  # 订单数量，使用整数字段
-    order_date = models.DateTimeField(auto_now_add=True)  # 订单日期，自动设置为创建时的日期时间
-    customer_name = models.CharField(max_length=100)  # 客户姓名，最大长度为100个字符
-    customer_address = models.TextField()  # 客户地址，使用文本字段
-
-    def __str__(self):
-        return f"Order {self.id} for {self.product.name}"  # 返回订单ID和产品名称作为字符串表示
 
 class PackingList(models.Model):
     name = models.CharField(max_length=200)  # 装箱单名称

@@ -9,7 +9,6 @@ urlpatterns = [
     path('products/<int:pk>/edit/', views.edit_product, name='edit_product'),
     path('products/<int:pk>/delete/', views.delete_product, name='delete_product'),
     path('products/export/', views.export_products, name='export_products'),  # 添加导出功能的 URL 路由
-    path('orders/', views.order_list, name='order_list'),
     path('inventory/', views.inventory_list, name='inventory_list'),
     path('packing/', views.packing_list, name='packing_list'),
     path('packing/<int:pk>/', views.packing_list_detail, name='packing_list_detail'),
