@@ -22,16 +22,10 @@
         <tr>
             <th>SKU</th>
             <th>中文名称</th>
-            <th>英文名称</th>
-            <th>描述</th>
             <th>价格</th>
-            <th>SPU</th>
             <th>类别</th>
-            <th>供应商</th>
-            <th>品牌</th>
             <th>重量</th>
             <th>体积</th>
-            <th>状态</th>
             <th>图片</th>
             <th>库存</th>
             <th>创建时间</th>
@@ -44,16 +38,10 @@
         <tr>
             <td>{{ product.sku }}</td>
             <td>{{ product.chinese_name }}</td>
-            <td>{{ product.name }}</td>
-            <td>{{ product.description }}</td>
             <td>${{ product.price }}</td>
-            <td>{{ product.spu }}</td>
             <td>{{ product.category }}</td>
-            <td>{{ product.supplier }}</td>
-            <td>{{ product.brand }}</td>
             <td>{{ product.weight }}</td>
             <td>{{ product.volume }}</td>
-            <td>{{ product.status }}</td>
             <td>
                 {% if product.image %}
                     <img src="{{ product.image.url }}" alt="{{ product.name }}" width="50">

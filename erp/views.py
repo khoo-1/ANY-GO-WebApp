@@ -15,17 +15,11 @@ def product_list(request):
     if query:
         products = Product.objects.filter(
             Q(sku__icontains=query) |
-            Q(name__icontains=query) |
             Q(chinese_name__icontains=query) |
-            Q(description__icontains=query) |
             Q(price__icontains=query) |
-            Q(spu__icontains=query) |
             Q(category__icontains=query) |
-            Q(supplier__icontains=query) |
-            Q(brand__icontains=query) |
             Q(weight__icontains=query) |
-            Q(volume__icontains=query) |
-            Q(status__icontains=query)
+            Q(volume__icontains=query)
         ).order_by('id')  # 添加排序
     else:
         products = Product.objects.all().order_by('id')  # 添加排序
@@ -38,11 +32,11 @@ def product_list(request):
 
 def export_products(request):
     # 获取所有产品
-    products = Product.objects.all().values('sku', 'chinese_name', 'name', 'description', 'price', 'spu', 'category', 'supplier', 'brand', 'weight', 'volume', 'status', 'stock', 'created_at', 'updated_at')
+    products = Product.objects.all().values('sku', 'chinese_name', 'price', 'category', 'weight', 'volume', 'stock', 'created_at', 'updated_at')
     
     # 创建一个 DataFrame，并指定列名
     df = pd.DataFrame(products)
-    df.columns = ['SKU', '中文名称', '英文名称', '描述', '价格', 'SPU', '类别', '供应商', '品牌', '重量', '体积', '状态', '库存', '创建时间', '更新时间']
+    df.columns = ['SKU', '中文名称', '价格', '类别', '重量', '体积', '库存', '创建时间', '更新时间']
     
     # 将日期时间字段转换为无时区的格式
     df['创建时间'] = df['创建时间'].dt.tz_localize(None)
@@ -93,32 +87,20 @@ def bulk_upload(request, template_name='erp/bulk_upload.html'):
                 product = Product.objects.get(sku=row['SKU'])
                 # 更新现有产品
                 product.chinese_name = row['中文名称']
-                product.name = row['英文名称']
-                product.description = row['描述']
                 product.price = float(row['价格']) if pd.notna(row['价格']) else 0.0
-                product.spu = row['SPU']
                 product.category = row['类别']
-                product.supplier = row['供应商']
-                product.brand = row['品牌']
                 product.weight = float(row['重量']) if pd.notna(row['重量']) else 0.0
                 product.volume = float(row['体积']) if pd.notna(row['体积']) else 0.0
-                product.status = row['状态']
                 product.stock = int(row['库存']) if pd.notna(row['库存']) else 0
             except Product.DoesNotExist:
                 # 创建新产品
                 product = Product(
                     sku=row['SKU'],
                     chinese_name=row['中文名称'],
-                    name=row['英文名称'],
-                    description=row['描述'],
                     price=float(row['价格']) if pd.notna(row['价格']) else 0.0,
-                    spu=row['SPU'],
                     category=row['类别'],
-                    supplier=row['供应商'],
-                    brand=row['品牌'],
                     weight=float(row['重量']) if pd.notna(row['重量']) else 0.0,
                     volume=float(row['体积']) if pd.notna(row['体积']) else 0.0,
-                    status=row['状态'],
                     stock=int(row['库存']) if pd.notna(row['库存']) else 0
                 )
             product.save()
@@ -155,35 +137,21 @@ def save_bulk_upload(request):
                 product = Product.objects.get(sku=row['sku'])
                 # 更新所有字段
                 product.chinese_name = row['中文名称']
-                product.name = row['英文名称']
-                product.description = row['描述']
                 product.price = float(row['价格']) if row['价格'] else 0.0
-                product.spu = row['SPU']
                 product.category = row['类别']
-                product.supplier = row['供应商']
-                product.brand = row['品牌']
                 product.weight = float(row['重量']) if row['重量'] else 0.0
                 product.volume = float(row['体积']) if row['体积'] else 0.0
-                product.status = row['状态']
                 product.stock = int(row['库存']) if row['库存'] else 0
-                product.type = packing_list.type
             except Product.DoesNotExist:
                 # 如果产品不存在，创建新产品
                 product = Product(
                     sku=row['sku'],
                     chinese_name=row['中文名称'],
-                    name=row['英文名称'],
-                    description=row['描述'],
                     price=float(row['价格']) if row['价格'] else 0.0,
-                    spu=row['SPU'],
                     category=row['类别'],
-                    supplier=row['供应商'],
-                    brand=row['品牌'],
                     weight=float(row['重量']) if row['重量'] else 0.0,
                     volume=float(row['体积']) if row['体积'] else 0.0,
-                    status=row['状态'],
-                    stock=int(row['库存']) if row['库存'] else 0,
-                    type=packing_list.type
+                    stock=int(row['库存']) if row['库存'] else 0
                 )
             
             # 保存产品
@@ -270,32 +238,20 @@ def bulk_upload(request):
                 product = Product.objects.get(sku=row['SKU'])
                 # 更新现有产品
                 product.chinese_name = row['中文名称']
-                product.name = row['英文名称']
-                product.description = row['描述']
                 product.price = float(row['价格']) if pd.notna(row['价格']) else 0.0
-                product.spu = row['SPU']
                 product.category = row['类别']
-                product.supplier = row['供应商']
-                product.brand = row['品牌']
                 product.weight = float(row['重量']) if pd.notna(row['重量']) else 0.0
                 product.volume = float(row['体积']) if pd.notna(row['体积']) else 0.0
-                product.status = row['状态']
                 product.stock = int(row['库存']) if pd.notna(row['库存']) else 0
             except Product.DoesNotExist:
                 # 创建新产品
                 product = Product(
                     sku=row['SKU'],
                     chinese_name=row['中文名称'],
-                    name=row['英文名称'],
-                    description=row['描述'],
                     price=float(row['价格']) if pd.notna(row['价格']) else 0.0,
-                    spu=row['SPU'],
                     category=row['类别'],
-                    supplier=row['供应商'],
-                    brand=row['品牌'],
                     weight=float(row['重量']) if pd.notna(row['重量']) else 0.0,
                     volume=float(row['体积']) if pd.notna(row['体积']) else 0.0,
-                    status=row['状态'],
                     stock=int(row['库存']) if pd.notna(row['库存']) else 0
                 )
             product.save()

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+
+# Static files
+staticfiles/
+
+# Media files
+media/
+
+# IDE
+.idea/
+.vscode/
+
+# Temporary files
+*.swp
+*~
+
+# Uploads
+uploads/
+
+# Excel files
+*.xlsx
+*.xls

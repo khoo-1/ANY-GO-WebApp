@@ -12,17 +12,11 @@ class Warehouse(models.Model):
 
 class Product(models.Model):
     sku = models.CharField(max_length=100, unique=True)  # SKU（库存单位），最大长度为100个字符，唯一
-    name = models.CharField(max_length=200, blank=True, null=True)  # 英文名称，最大长度为200个字符，可以为空
     chinese_name = models.CharField(max_length=200)  # 中文名称，最大长度为200个字符，非空
-    description = models.TextField(blank=True, null=True)  # 产品描述，使用文本字段，可以为空
     price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # 产品价格，最多10位数字，小数点后保留2位，可以为空
-    spu = models.CharField(max_length=100, blank=True, null=True)  # SPU（标准产品单元），最大长度为100个字符，可以为空
     category = models.CharField(max_length=100, blank=True, null=True)  # 产品类别，最大长度为100个字符，可以为空
-    supplier = models.CharField(max_length=100, blank=True, null=True)  # 供应商名称，最大长度为100个字符，可以为空
-    brand = models.CharField(max_length=100, blank=True, null=True)  # 产品品牌，最大长度为100个字符，可以为空
     weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # 产品重量，最多10位数字，小数点后保留2位，可以为空
     volume = models.CharField(max_length=100, blank=True, null=True)  # 产品体积，最大长度为100个字符，可以为空
-    status = models.CharField(max_length=50, default='active')  # 产品状态，默认值为'active'
     image = models.ImageField(upload_to='products/', null=True, blank=True)  # 产品图片，上传路径为'products/'，允许为空
     stock = models.IntegerField(blank=True, null=True)  # 库存数量，使用整数字段，可以为空
     created_at = models.DateTimeField(default=timezone.now)  # 创建时间，默认值为当前时间
