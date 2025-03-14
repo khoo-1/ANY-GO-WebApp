@@ -79,7 +79,14 @@ def bulk_upload(request, template_name='erp/bulk_upload.html'):
                 destination.write(chunk)
 
         # 读取Excel文件
-        df = pd.read_excel(file_path)
+        wb = pd.read_excel(file_path, sheet_name=None)
+        
+        # 获取第一个工作表
+        sheet_name = next(iter(wb))
+        df = wb[sheet_name]
+        
+        # 读取总价格（D2单元格）
+        total_price = pd.read_excel(file_path, usecols='D', nrows=2).iloc[1, 0]
         
         # 处理每一行数据
         for index, row in df.iterrows():
@@ -226,7 +233,14 @@ def bulk_upload(request):
                 destination.write(chunk)
 
         # 读取Excel文件
-        df = pd.read_excel(file_path)
+        wb = pd.read_excel(file_path, sheet_name=None)
+        
+        # 获取第一个工作表
+        sheet_name = next(iter(wb))
+        df = wb[sheet_name]
+        
+        # 读取总价格（D2单元格）
+        total_price = pd.read_excel(file_path, usecols='D', nrows=2).iloc[1, 0]
         
         # 处理每一行数据
         for index, row in df.iterrows():
