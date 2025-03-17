@@ -1,0 +1,27 @@
+{% extends 'erp/base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h3>清除所有数据</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <strong>警告！</strong> 此操作将删除所有产品、装箱单和库存数据。此操作不可逆！
+                    </div>
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-danger btn-lg">确认清除所有数据</button>
+                            <a href="{% url 'packing_list' %}" class="btn btn-secondary btn-lg ml-3">取消</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
