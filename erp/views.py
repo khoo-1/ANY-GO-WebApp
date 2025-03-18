@@ -604,87 +604,102 @@ def download_shipment_template(request):
 
 
 def shipment_import(request):
-    """发货单导入视图"""
+    """导入发货单"""
     if request.method == 'POST':
         try:
-            file = request.FILES.get('file')
+            # 获取店铺和批次号
             shop_id = request.POST.get('shop')
             batch_number = request.POST.get('batch_number')
             
-            if not file:
-                messages.error(request, '请选择要上传的文件')
+            # 验证输入
+            if not shop_id or not batch_number:
+                messages.error(request, '请选择店铺并输入批次号')
                 shops = Shop.objects.all()
                 return render(request, 'erp/shipment_import.html', {'shops': shops})
             
-            if not shop_id:
-                messages.error(request, '请选择店铺')
-                shops = Shop.objects.all()
-                return render(request, 'erp/shipment_import.html', {'shops': shops})
-            
-            if not batch_number:
-                messages.error(request, '请输入批次号')
-                shops = Shop.objects.all()
-                return render(request, 'erp/shipment_import.html', {'shops': shops})
-            
-            # 检查批次号是否已存在
+            # 验证批次号是否已存在
             if ShipmentOrder.objects.filter(batch_number=batch_number).exists():
-                messages.error(request, '该批次号已存在')
+                messages.error(request, f'批次号 {batch_number} 已存在')
                 shops = Shop.objects.all()
                 return render(request, 'erp/shipment_import.html', {'shops': shops})
             
-            # 保存上传的文件
+            # 获取上传的文件
+            file = request.FILES.get('file')
+            if not file:
+                messages.error(request, '请上传文件')
+                shops = Shop.objects.all()
+                return render(request, 'erp/shipment_import.html', {'shops': shops})
+            
+            # 保存上传的文件到临时位置
             file_path = handle_uploaded_file(file)
-
+            
+            # 检查文件是否存在
+            if not os.path.exists(file_path):
+                messages.error(request, '文件保存失败')
+                shops = Shop.objects.all()
+                return render(request, 'erp/shipment_import.html', {'shops': shops})
+            
             # 读取Excel文件
-            df = pd.read_excel(file_path)
-                
-            # 验证必要的列是否存在
-            required_columns = ['SKU', '数量', '采购成本', '体积']
-            if not all(col in df.columns for col in required_columns):
-                messages.error(request, '文件格式不正确，请使用正确的模板')
+            try:
+                df = pd.read_excel(file_path)
+            except Exception as e:
+                os.remove(file_path)  # 删除临时文件
+                messages.error(request, f'Excel文件读取失败: {str(e)}')
                 shops = Shop.objects.all()
                 return render(request, 'erp/shipment_import.html', {'shops': shops})
             
             # 创建发货单
-            shop = Shop.objects.get(id=shop_id)
+            shop = get_object_or_404(Shop, pk=shop_id)
             shipment = ShipmentOrder.objects.create(
                 batch_number=batch_number,
-                shop=shop,
-                status='在途'
+                shop=shop
             )
             
-            # 处理每一行数据
-            total_price = 0
-            for _, row in df.iterrows():
-                sku = str(row['SKU']).strip()
-                quantity = int(row['数量'])
-                purchase_cost = float(row['采购成本'])
-                volume = float(row['体积'])
-                
-                # 获取或创建产品
-                product, created = Product.objects.get_or_create(
-                    sku=sku,
-                    defaults={
-                        'chinese_name': row.get('中文名称', ''),
-                        'price': purchase_cost,
-                        'volume': volume
-                    }
-                )
-                
-                # 创建发货单项目
-                ShipmentItem.objects.create(
-                    shipment=shipment,
-                    product=product,
-                    quantity=quantity,
-                    purchase_cost=purchase_cost,
-                    volume=volume
-                )
-                
-                total_price += purchase_cost * quantity
+            # 准备批量创建的列表
+            shipment_items = []
+            product_cache = {}  # 缓存已获取的产品，避免重复查询
             
-            # 更新发货单总价格
-            shipment.total_price = total_price
-            shipment.save()
+            # 处理每一行数据
+            for _, row in df.iterrows():
+                sku = row['SKU']
+                quantity = row['数量']
+                purchase_cost = row['采购成本']
+                volume = row['体积']
+                
+                # 从缓存中获取产品或创建
+                if sku in product_cache:
+                    product = product_cache[sku]
+                else:
+                    # 获取或创建产品
+                    product, _ = Product.objects.get_or_create(
+                        sku=sku,
+                        defaults={
+                            'chinese_name': row.get('中文名称', ''),
+                            'price': purchase_cost,
+                            'volume': volume
+                        }
+                    )
+                    product_cache[sku] = product
+                
+                # 添加到批量创建列表
+                shipment_items.append(
+                    ShipmentItem(
+                        shipment_order=shipment,
+                        product=product,
+                        quantity=quantity,
+                        purchase_cost=purchase_cost,
+                        volume=volume
+                    )
+                )
+                
+                # 每50个创建一次，减少内存占用
+                if len(shipment_items) >= 50:
+                    ShipmentItem.objects.bulk_create(shipment_items)
+                    shipment_items = []
+            
+            # 创建剩余的项目
+            if shipment_items:
+                ShipmentItem.objects.bulk_create(shipment_items)
             
             # 删除临时文件
             os.remove(file_path)
@@ -693,12 +708,11 @@ def shipment_import(request):
             return redirect('shipment_list')
             
         except Exception as e:
+            # 确保临时文件被删除
+            if 'file_path' in locals() and os.path.exists(file_path):
+                os.remove(file_path)
+            
             messages.error(request, f'导入失败：{str(e)}')
-            if 'file_path' in locals():
-                try:
-                    os.remove(file_path)
-                except:
-                    pass
             shops = Shop.objects.all()
             return render(request, 'erp/shipment_import.html', {'shops': shops})
     
@@ -708,14 +722,36 @@ def shipment_import(request):
 
 def shipment_list(request):
     """发货单列表"""
-    shipments = ShipmentOrder.objects.all().order_by('-created_at')
-    return render(request, 'erp/shipment_list.html', {'shipments': shipments})
+    query = request.GET.get('q', '')
+    
+    if query:
+        shipments = ShipmentOrder.objects.filter(
+            Q(batch_number__icontains=query) | 
+            Q(shop__name__icontains=query) |
+            Q(status__icontains=query)
+        ).select_related('shop').order_by('-created_at')
+    else:
+        shipments = ShipmentOrder.objects.all().select_related('shop').order_by('-created_at')
+    
+    # 使用Django的内置分页
+    paginator = Paginator(shipments, 20)  # 每页显示20个发货单
+    page_number = request.GET.get('page', 1)
+    
+    try:
+        page_obj = paginator.get_page(page_number)
+    except (ValueError, TypeError):
+        page_obj = paginator.get_page(1)
+    
+    return render(request, 'erp/shipment_list.html', {
+        'page_obj': page_obj,
+        'query': query
+    })
 
 
 def shipment_detail(request, pk):
     """发货单详情"""
-    shipment = get_object_or_404(ShipmentOrder, pk=pk)
-    items = shipment.items.all()
+    shipment = get_object_or_404(ShipmentOrder.objects.select_related('shop'), pk=pk)
+    items = shipment.items.select_related('product').all()
     return render(request, 'erp/shipment_detail.html', {
         'shipment': shipment,
         'items': items
@@ -724,66 +760,84 @@ def shipment_detail(request, pk):
 
 def change_shipment_status(request, shipment_id):
     """变更发货单状态为到岸，并分摊头程成本"""
-    shipment = get_object_or_404(ShipmentOrder, id=shipment_id)
+    shipment = get_object_or_404(ShipmentOrder.objects.select_related('shop'), pk=shipment_id)
     
     if request.method == 'POST':
-        total_price = request.POST.get('total_price')
-        if total_price:
-            try:
-                total_price = Decimal(total_price)
-                
-                # 计算所有物品的总体积
-                items = ShipmentItem.objects.filter(shipment_order=shipment)
-                total_volume = Decimal('0')
-                for item in items:
-                    total_volume += Decimal(str(item.volume)) * Decimal(str(item.quantity))
+        try:
+            # 获取总价格
+            total_price = Decimal(request.POST.get('total_price', '0'))
+            
+            if total_price <= 0:
+                messages.error(request, '总价格必须大于0')
+                return render(request, 'erp/change_shipment_status.html', {'shipment': shipment})
+            
+            # 更新发货单状态和总价格
+            shipment.status = '到岸'
+            shipment.total_price = total_price
+            shipment.save()
+            
+            # 获取所有相关的物品
+            items = list(ShipmentItem.objects.filter(shipment_order=shipment).select_related('product'))
+            
+            if items:
+                # 计算总体积
+                total_volume = sum(Decimal(str(item.volume)) * Decimal(str(item.quantity)) for item in items)
                 
                 if total_volume > 0:
-                    # 更新发货单总价格
-                    shipment.total_price = total_price
-                    shipment.status = '到岸'
-                    shipment.save()
+                    # 提前计算单位价格系数以减少除法操作
+                    price_factor = total_price / total_volume
                     
-                    # 为每个物品计算头程成本
+                    # 批量更新头程成本
+                    updated_items = []
+                    updated_products = []
+                    
                     for item in items:
                         try:
                             # 计算这个物品占总体积的比例
                             item_volume = Decimal(str(item.volume)) * Decimal(str(item.quantity))
-                            volume_ratio = item_volume / total_volume
-                            
-                            # 计算这个物品应分摊的头程成本
-                            item_shipping_cost = total_price * volume_ratio
                             
                             # 计算单个物品的头程成本
                             if item.quantity > 0:  # 防止除以零
-                                per_item_shipping_cost = item_shipping_cost / Decimal(str(item.quantity))
+                                per_item_shipping_cost = (price_factor * item_volume) / Decimal(str(item.quantity))
                                 # 保留两位小数
                                 per_item_shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
                             else:
                                 per_item_shipping_cost = Decimal('0.00')
                             
                             # 更新物品的头程成本
-                            item.shipping_cost = per_item_shipping_cost
-                            item.save()
+                            if item.shipping_cost != per_item_shipping_cost:
+                                item.shipping_cost = per_item_shipping_cost
+                                updated_items.append(item)
                             
                             # 同时更新产品的头程成本
                             product = item.product
-                            product.shipping_cost = per_item_shipping_cost
-                            # 保留两位小数
-                            product.shipping_cost = product.shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
-                            product.save()
+                            if product.shipping_cost != per_item_shipping_cost:
+                                product.shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                                updated_products.append(product)
+                                
                         except Exception as e:
                             messages.error(request, f"处理物品 {item.product.sku} 时出错：{str(e)}")
                             continue
                     
-                    messages.success(request, "发货单状态已更新为到岸，并已分摊头程成本")
-                    return redirect('shipment_list')
+                    # 批量保存以减少数据库操作
+                    if updated_items:
+                        for item in updated_items:
+                            item.save()
+                    
+                    if updated_products:
+                        for product in updated_products:
+                            product.save()
+                            
+                    messages.success(request, '发货单状态已更新为到岸，头程成本已分摊')
                 else:
-                    messages.error(request, "总体积为零，无法分摊头程成本")
-            except ValueError:
-                messages.error(request, "请输入有效的总价格")
-        else:
-            messages.error(request, "请输入总价格")
+                    messages.warning(request, '发货单状态已更新为到岸，但总体积为0，无法分摊头程成本')
+            else:
+                messages.warning(request, '发货单状态已更新为到岸，但没有相关物品，无法分摊头程成本')
+            
+            return redirect('shipment_detail', pk=shipment_id)
+            
+        except (ValueError, TypeError) as e:
+            messages.error(request, f'更新失败：{str(e)}')
     
     return render(request, 'erp/change_shipment_status.html', {'shipment': shipment})
 
@@ -810,14 +864,14 @@ def inventory_edit(request, pk):
 
 
 def export_shipment_detail(request, pk):
-    """导出发货单商品明细"""
+    """导出发货单详情"""
     shipment = get_object_or_404(ShipmentOrder, pk=pk)
-    items = ShipmentItem.objects.filter(shipment_order=shipment)
+    items = ShipmentItem.objects.filter(shipment_order=shipment).select_related('product')
     
-    # 创建商品明细数据
-    items_data = []
+    # 创建DataFrame
+    data = []
     for item in items:
-        items_data.append({
+        data.append({
             'SKU': item.product.sku,
             '中文名称': item.product.chinese_name,
             '数量': item.quantity,
@@ -827,22 +881,273 @@ def export_shipment_detail(request, pk):
             '货值': item.purchase_cost * item.quantity + (item.shipping_cost * item.quantity if shipment.status == '到岸' else 0)
         })
     
-    # 创建DataFrame
-    df = pd.DataFrame(items_data)
+    df = pd.DataFrame(data)
     
     # 创建Excel响应
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename=shipment_{shipment.batch_number}_items.xlsx'
+    response['Content-Disposition'] = f'attachment; filename=shipment_{shipment.batch_number}.xlsx'
     
     # 使用xlsxwriter引擎写入Excel
     with pd.ExcelWriter(response, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
+        # 写入发货单基本信息
+        info_df = pd.DataFrame([{
+            '批次号': shipment.batch_number,
+            '店铺': shipment.shop.name,
+            '状态': shipment.status,
+            '创建时间': shipment.created_at.strftime('%Y-%m-%d %H:%M'),
+            '总价格': shipment.total_price,
+            '总货值': shipment.calculate_total_value
+        }])
+        info_df.to_excel(writer, sheet_name='基本信息', index=False)
         
-        # 获取worksheet对象
-        worksheet = writer.sheets['Sheet1']
+        # 写入商品明细
+        df.to_excel(writer, sheet_name='商品明细', index=False)
+        
+        # 获取workbook和worksheet对象
+        workbook = writer.book
+        info_sheet = writer.sheets['基本信息']
+        detail_sheet = writer.sheets['商品明细']
         
         # 设置列宽
-        for idx, col in enumerate(df.columns):
-            worksheet.set_column(idx, idx, 15)
+        for sheet in [info_sheet, detail_sheet]:
+            for idx, col in enumerate(df.columns):
+                sheet.set_column(idx, idx, 15)
     
     return response
+
+
+def rollback_shipment_status(request, shipment_id):
+    """将发货单状态从"到岸"回退为"在途"，清除头程成本和总价格"""
+    shipment = get_object_or_404(ShipmentOrder, id=shipment_id)
+    
+    if request.method == 'POST':
+        try:
+            if shipment.status != '到岸':
+                messages.error(request, "只有'到岸'状态的发货单才能回退")
+                return redirect('shipment_detail', pk=shipment_id)
+            
+            # 更新发货单状态
+            shipment.status = '在途'
+            shipment.total_price = None  # 清除总价格
+            shipment.save()
+            
+            # 清除所有关联项目的头程成本
+            items = ShipmentItem.objects.filter(shipment_order=shipment)
+            for item in items:
+                item.shipping_cost = 0  # 重置头程成本为0
+                item.save()
+            
+            messages.success(request, "发货单状态已回退为'在途'，头程成本已清除")
+            return redirect('shipment_list')
+            
+        except Exception as e:
+            messages.error(request, f"回退状态失败：{str(e)}")
+    
+    return render(request, 'erp/rollback_shipment_status.html', {'shipment': shipment})
+
+
+def edit_shipment_item(request, shipment_id, item_id):
+    """编辑发货单商品明细"""
+    shipment = get_object_or_404(ShipmentOrder, pk=shipment_id)
+    item = get_object_or_404(ShipmentItem.objects.select_related('product'), pk=item_id, shipment_order=shipment)
+    
+    if request.method == 'POST':
+        try:
+            # 获取表单数据
+            quantity = int(request.POST.get('quantity', 0))
+            purchase_cost = Decimal(request.POST.get('purchase_cost', '0'))
+            volume = Decimal(request.POST.get('volume', '0'))
+            
+            # 保存修改
+            item.quantity = quantity
+            item.purchase_cost = purchase_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+            item.volume = volume.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+            
+            # 如果发货单状态是到岸，重新计算头程成本
+            if shipment.status == '到岸' and shipment.total_price:
+                # 首先保存当前项目的更改
+                item.save()
+                
+                # 一次性获取所有商品及其产品信息
+                all_items = list(ShipmentItem.objects.filter(shipment_order=shipment).select_related('product'))
+                
+                # 计算总体积
+                total_volume = sum(Decimal(str(i.volume)) * Decimal(str(i.quantity)) for i in all_items)
+                
+                if total_volume > 0:
+                    # 提前计算单位价格系数以减少除法操作
+                    price_factor = shipment.total_price / total_volume
+                    
+                    # 批量更新头程成本
+                    for i in all_items:
+                        item_volume = Decimal(str(i.volume)) * Decimal(str(i.quantity))
+                        
+                        if i.quantity > 0:
+                            per_item_shipping_cost = (price_factor * item_volume) / Decimal(str(i.quantity))
+                            per_item_shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                        else:
+                            per_item_shipping_cost = Decimal('0.00')
+                        
+                        # 只在需要更新时才更新，避免不必要的数据库写入
+                        if i.shipping_cost != per_item_shipping_cost:
+                            i.shipping_cost = per_item_shipping_cost
+                            i.save()
+                            
+                            # 更新产品的头程成本
+                            product = i.product
+                            if product.shipping_cost != per_item_shipping_cost:
+                                product.shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                                product.save()
+            else:
+                # 非到岸状态，直接保存项目
+                item.save()
+            
+            messages.success(request, '商品明细已更新')
+            return redirect('shipment_detail', pk=shipment_id)
+            
+        except (ValueError, TypeError) as e:
+            messages.error(request, f'更新失败：{str(e)}')
+    
+    return render(request, 'erp/edit_shipment_item.html', {
+        'shipment': shipment,
+        'item': item
+    })
+
+
+def add_shipment_item(request, shipment_id):
+    """向发货单添加新商品"""
+    shipment = get_object_or_404(ShipmentOrder.objects.select_related('shop'), pk=shipment_id)
+    
+    if request.method == 'POST':
+        try:
+            # 获取表单数据
+            sku = request.POST.get('sku', '').strip()
+            quantity = int(request.POST.get('quantity', 0))
+            purchase_cost = Decimal(request.POST.get('purchase_cost', '0'))
+            volume = Decimal(request.POST.get('volume', '0'))
+            chinese_name = request.POST.get('chinese_name', '').strip()
+            
+            if not sku or quantity <= 0:
+                messages.error(request, '请输入有效的SKU和数量')
+                return render(request, 'erp/add_shipment_item.html', {'shipment': shipment})
+            
+            # 获取或创建产品
+            product, created = Product.objects.get_or_create(
+                sku=sku,
+                defaults={
+                    'chinese_name': chinese_name,
+                    'price': purchase_cost,
+                    'volume': volume
+                }
+            )
+            
+            # 如果产品已存在但中文名为空，更新中文名
+            if not created and not product.chinese_name and chinese_name:
+                product.chinese_name = chinese_name
+                product.save()
+            
+            # 创建发货单项目
+            item = ShipmentItem.objects.create(
+                shipment_order=shipment,
+                product=product,
+                quantity=quantity,
+                purchase_cost=purchase_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP'),
+                volume=volume.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+            )
+            
+            # 如果发货单状态是到岸，重新计算头程成本
+            if shipment.status == '到岸' and shipment.total_price:
+                # 一次性获取所有商品及其产品信息
+                all_items = list(ShipmentItem.objects.filter(shipment_order=shipment).select_related('product'))
+                
+                # 计算总体积
+                total_volume = sum(Decimal(str(i.volume)) * Decimal(str(i.quantity)) for i in all_items)
+                
+                if total_volume > 0:
+                    # 提前计算单位价格系数以减少除法操作
+                    price_factor = shipment.total_price / total_volume
+                    
+                    # 批量更新头程成本
+                    for i in all_items:
+                        item_volume = Decimal(str(i.volume)) * Decimal(str(i.quantity))
+                        
+                        if i.quantity > 0:
+                            per_item_shipping_cost = (price_factor * item_volume) / Decimal(str(i.quantity))
+                            per_item_shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                        else:
+                            per_item_shipping_cost = Decimal('0.00')
+                        
+                        # 只在需要更新时才更新，避免不必要的数据库写入
+                        if i.shipping_cost != per_item_shipping_cost:
+                            i.shipping_cost = per_item_shipping_cost
+                            i.save()
+                            
+                            # 更新产品的头程成本
+                            product = i.product
+                            if product.shipping_cost != per_item_shipping_cost:
+                                product.shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                                product.save()
+            
+            messages.success(request, f'成功添加商品 {sku}')
+            return redirect('shipment_detail', pk=shipment_id)
+            
+        except (ValueError, TypeError) as e:
+            messages.error(request, f'添加失败：{str(e)}')
+    
+    return render(request, 'erp/add_shipment_item.html', {'shipment': shipment})
+
+
+def delete_shipment_item(request, shipment_id, item_id):
+    """删除发货单商品明细"""
+    shipment = get_object_or_404(ShipmentOrder, pk=shipment_id)
+    item = get_object_or_404(ShipmentItem.objects.select_related('product'), pk=item_id, shipment_order=shipment)
+    
+    if request.method == 'POST':
+        try:
+            # 删除商品明细
+            item.delete()
+            
+            # 如果发货单状态是到岸，重新计算头程成本
+            if shipment.status == '到岸' and shipment.total_price:
+                # 一次性获取剩余的商品明细
+                all_items = list(ShipmentItem.objects.filter(shipment_order=shipment).select_related('product'))
+                
+                if all_items:
+                    # 计算总体积
+                    total_volume = sum(Decimal(str(i.volume)) * Decimal(str(i.quantity)) for i in all_items)
+                    
+                    if total_volume > 0:
+                        # 提前计算单位价格系数以减少除法操作
+                        price_factor = shipment.total_price / total_volume
+                        
+                        # 批量更新头程成本
+                        for i in all_items:
+                            item_volume = Decimal(str(i.volume)) * Decimal(str(i.quantity))
+                            
+                            if i.quantity > 0:
+                                per_item_shipping_cost = (price_factor * item_volume) / Decimal(str(i.quantity))
+                                per_item_shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                            else:
+                                per_item_shipping_cost = Decimal('0.00')
+                            
+                            # 只在需要更新时才更新，避免不必要的数据库写入
+                            if i.shipping_cost != per_item_shipping_cost:
+                                i.shipping_cost = per_item_shipping_cost
+                                i.save()
+                                
+                                # 更新产品的头程成本
+                                product = i.product
+                                if product.shipping_cost != per_item_shipping_cost:
+                                    product.shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                                    product.save()
+            
+            messages.success(request, '商品明细已删除')
+            return redirect('shipment_detail', pk=shipment_id)
+            
+        except Exception as e:
+            messages.error(request, f'删除失败：{str(e)}')
+    
+    return render(request, 'erp/delete_shipment_item.html', {
+        'shipment': shipment,
+        'item': item
+    })

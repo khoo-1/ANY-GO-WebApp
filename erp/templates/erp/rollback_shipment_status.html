@@ -1,0 +1,48 @@
+{% extends "erp/base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h2>确认回退发货单状态</h2>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-warning">
+                <strong>警告：</strong> 您正在将发货单 "{{ shipment.batch_number }}" 的状态从"到岸"回退为"在途"。此操作将清除所有头程成本和总价格信息。
+            </div>
+            
+            <h4 class="mb-4">发货单信息</h4>
+            <table class="table table-bordered">
+                <tr>
+                    <th>批次号</th>
+                    <td>{{ shipment.batch_number }}</td>
+                </tr>
+                <tr>
+                    <th>店铺</th>
+                    <td>{{ shipment.shop.name }}</td>
+                </tr>
+                <tr>
+                    <th>当前状态</th>
+                    <td>{{ shipment.status }}</td>
+                </tr>
+                <tr>
+                    <th>总价格</th>
+                    <td>{{ shipment.total_price }}</td>
+                </tr>
+                <tr>
+                    <th>创建时间</th>
+                    <td>{{ shipment.created_at|date:"Y-m-d H:i" }}</td>
+                </tr>
+            </table>
+            
+            <form method="post" class="mt-4">
+                {% csrf_token %}
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <a href="{% url 'shipment_detail' shipment.id %}" class="btn btn-secondary me-md-2">取消</a>
+                    <button type="submit" class="btn btn-danger">确认回退</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,63 @@
+{% extends "erp/base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h2>添加商品明细</h2>
+        </div>
+        <div class="card-body">
+            <div class="mb-4">
+                <h5>发货单信息</h5>
+                <p>
+                    <strong>批次号：</strong>{{ shipment.batch_number }} | 
+                    <strong>店铺：</strong>{{ shipment.shop.name }} | 
+                    <strong>状态：</strong>{{ shipment.status }}
+                </p>
+            </div>
+            
+            <form method="post" class="mt-4">
+                {% csrf_token %}
+                
+                <div class="mb-3">
+                    <label for="sku" class="form-label">SKU</label>
+                    <input type="text" class="form-control" id="sku" name="sku" required>
+                    <small class="text-muted">如果SKU已存在，将使用现有产品，否则创建新产品</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="chinese_name" class="form-label">中文名称</label>
+                    <input type="text" class="form-control" id="chinese_name" name="chinese_name">
+                    <small class="text-muted">可选，如果SKU已存在且有中文名，将使用现有中文名</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="quantity" class="form-label">数量</label>
+                    <input type="number" class="form-control" id="quantity" name="quantity" min="1" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="purchase_cost" class="form-label">采购成本</label>
+                    <input type="number" class="form-control" id="purchase_cost" name="purchase_cost" min="0" step="0.01" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="volume" class="form-label">体积</label>
+                    <input type="number" class="form-control" id="volume" name="volume" min="0" step="0.01" required>
+                </div>
+                
+                {% if shipment.status == '到岸' %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 注意：添加新商品会导致整个发货单的头程成本重新分配计算。
+                </div>
+                {% endif %}
+                
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <a href="{% url 'shipment_detail' shipment.id %}" class="btn btn-secondary me-md-2">取消</a>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

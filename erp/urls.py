@@ -26,5 +26,9 @@ urlpatterns = [
     path('shipment/<int:pk>/', views.shipment_detail, name='shipment_detail'),
     path('shipment/<int:pk>/delete/', views.delete_shipment, name='delete_shipment'),
     path('shipment/<int:shipment_id>/change-status/', views.change_shipment_status, name='change_shipment_status'),
+    path('shipment/<int:shipment_id>/rollback-status/', views.rollback_shipment_status, name='rollback_shipment_status'),
     path('shipment/<int:pk>/export/', views.export_shipment_detail, name='export_shipment_detail'),
+    path('shipment/<int:shipment_id>/item/<int:item_id>/edit/', views.edit_shipment_item, name='edit_shipment_item'),
+    path('shipment/<int:shipment_id>/item/add/', views.add_shipment_item, name='add_shipment_item'),
+    path('shipment/<int:shipment_id>/item/<int:item_id>/delete/', views.delete_shipment_item, name='delete_shipment_item'),
 ]

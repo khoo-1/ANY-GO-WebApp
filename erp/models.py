@@ -76,7 +76,7 @@ class ShipmentOrder(models.Model):
     
     batch_number = models.CharField(max_length=50, unique=True, verbose_name="批次号")
     shop = models.ForeignKey(Shop, on_delete=models.CASCADE, verbose_name="店铺")
-    total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="总价格")
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="总价格")
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='在途', verbose_name="状态")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
     

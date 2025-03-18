@@ -7,6 +7,11 @@
         <h2>发货单详情</h2>
         <div>
             <a href="{% url 'export_shipment_detail' shipment.pk %}" class="btn btn-success me-2">导出Excel</a>
+            {% if shipment.status == '在途' %}
+                <a href="{% url 'change_shipment_status' shipment.id %}" class="btn btn-warning me-2">变更为到岸</a>
+            {% elif shipment.status == '到岸' %}
+                <a href="{% url 'rollback_shipment_status' shipment.id %}" class="btn btn-danger me-2">回退到在途</a>
+            {% endif %}
             <a href="{% url 'shipment_list' %}" class="btn btn-secondary">返回列表</a>
         </div>
     </div>
@@ -46,8 +51,9 @@
     </div>
     
     <div class="card">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0">商品明细</h5>
+            <a href="{% url 'add_shipment_item' shipment_id=shipment.id %}" class="btn btn-sm btn-primary">添加商品</a>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -61,6 +67,7 @@
                             <th>体积</th>
                             <th>头程成本</th>
                             <th>货值</th>
+                            <th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -79,10 +86,16 @@
                                     {{ item.purchase_cost|add:item.shipping_cost|multiply:item.quantity }}
                                 {% endif %}
                             </td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a href="{% url 'edit_shipment_item' shipment_id=shipment.id item_id=item.id %}" class="btn btn-primary">编辑</a>
+                                    <a href="{% url 'delete_shipment_item' shipment_id=shipment.id item_id=item.id %}" class="btn btn-danger">删除</a>
+                                </div>
+                            </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center">暂无商品数据</td>
+                            <td colspan="8" class="text-center">暂无商品数据</td>
                         </tr>
                         {% endfor %}
                     </tbody>
