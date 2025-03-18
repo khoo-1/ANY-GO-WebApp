@@ -72,3 +72,15 @@
     </tr>
 </table>
 <a href="{% url 'product_list' %}">返回产品列表</a>
+
+<div class="product-info">
+    <h2>{{ product.chinese_name }}</h2>
+    <p><strong>SKU:</strong> {{ product.sku }}</p>
+    <p><strong>价格:</strong> {{ product.price }}</p>
+    <p><strong>类别:</strong> {{ product.category }}</p>
+    <p><strong>重量:</strong> {{ product.weight }}</p>
+    <p><strong>体积:</strong> {{ product.volume }}</p>
+    <p><strong>库存:</strong> {{ product.stock }}</p>
+    <p><strong>头程成本:</strong> {{ product.shipping_cost }}</p>
+    <p><strong>总货值:</strong> {{ product.total_value }}</p>
+</div>

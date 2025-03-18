@@ -31,11 +31,11 @@ def product_list(request):
         )  # 添加排序
     else:
         products = Product.objects.all().order_by("id")  # 添加排序
-
+    
     paginator = Paginator(products, 100)  # 每页显示100个产品
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
-
+    
     return render(request, "erp/product_list.html", {"page_obj": page_obj})
 
 
@@ -49,10 +49,10 @@ def export_products(request):
         "weight",
         "volume",
         "stock",
-        "created_at",
-        "updated_at",
+        "shipping_cost",
+        "total_value"
     )
-
+    
     # 创建一个 DataFrame，并指定列名
     df = pd.DataFrame(products)
     df.columns = [
@@ -63,24 +63,20 @@ def export_products(request):
         "重量",
         "体积",
         "库存",
-        "创建时间",
-        "更新时间",
+        "头程成本",
+        "总货值"
     ]
-
-    # 将日期时间字段转换为无时区的格式
-    df["创建时间"] = df["创建时间"].dt.tz_localize(None)
-    df["更新时间"] = df["更新时间"].dt.tz_localize(None)
-
+    
     # 创建一个 HttpResponse 对象，并设置内容类型为 Excel 文件
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     response["Content-Disposition"] = "attachment; filename=products.xlsx"
-
+    
     # 将 DataFrame 写入 Excel 文件
     with pd.ExcelWriter(response, engine="xlsxwriter") as writer:
         df.to_excel(writer, sheet_name="Products", index=False)
-
+    
     return response
 
 
@@ -119,7 +115,7 @@ def bulk_upload(request):
         if not os.path.exists(upload_dir):
             os.makedirs(upload_dir)
         file_path = os.path.join(upload_dir, unique_filename)
-
+        
         # 保存上传的文件
         with open(file_path, "wb+") as destination:
             for chunk in excel_file.chunks():
@@ -964,7 +960,6 @@ def bulk_upload(request):
             # 使用延迟删除，确保所有文件句柄都已关闭
             try:
                 import gc
-
                 gc.collect()  # 强制垃圾回收，释放文件句柄
                 time.sleep(0.5)  # 短暂延迟，确保文件句柄已释放
 
@@ -1001,7 +996,6 @@ def bulk_upload(request):
             # 尝试删除临时文件
             try:
                 import gc
-
                 gc.collect()
                 time.sleep(0.5)
 
@@ -1064,7 +1058,7 @@ def save_bulk_upload(request):
             type="批量上传",
             total_price=0.0,
         )
-
+        
         for index, row in df.iterrows():
             try:
                 # 尝试获取现有产品
@@ -1087,7 +1081,7 @@ def save_bulk_upload(request):
                     volume=float(row["体积"]) if row["体积"] else 0.0,
                     stock=int(row["库存"]) if row["库存"] else 0,
                 )
-
+            
             # 保存产品
             product.save()
 
@@ -1097,7 +1091,7 @@ def save_bulk_upload(request):
                 product=product,
                 quantity=int(row["数量"]) if row["数量"] else 0,
             )
-
+        
         return redirect("packing_list")
 
     return HttpResponse("无效的请求方法")
@@ -1106,7 +1100,7 @@ def save_bulk_upload(request):
 def edit_product(request, pk):
     # 获取要编辑的产品对象，如果不存在则返回404错误
     product = get_object_or_404(Product, pk=pk)
-
+    
     if request.method == "POST":
         # 如果请求方法是POST，表示表单已提交
         form = ProductForm(request.POST, request.FILES, instance=product)
@@ -1118,7 +1112,7 @@ def edit_product(request, pk):
     else:
         # 如果请求方法不是POST，表示是GET请求，显示表单
         form = ProductForm(instance=product)
-
+    
     # 渲染编辑产品页面，并传递表单对象
     return render(request, "erp/edit_product.html", {"form": form})
 
