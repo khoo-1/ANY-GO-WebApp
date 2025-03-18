@@ -7,6 +7,10 @@
     <h2 class="mb-4">装箱单列表</h2>
     <div class="row">
         <div class="col-12">
+            <div class="mb-3">
+                <a href="{% url 'bulk_upload' %}" class="btn btn-primary">上传装箱单</a>
+                <a href="{% url 'clear_all_data' %}" class="btn btn-danger float-right">清除所有数据</a>
+            </div>
             <div class="table-responsive">
                 <table class="table table-bordered table-hover">
                     <thead>

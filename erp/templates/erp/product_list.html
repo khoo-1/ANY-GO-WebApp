@@ -26,10 +26,9 @@
             <th>类别</th>
             <th>重量</th>
             <th>体积</th>
-            <th>图片</th>
             <th>库存</th>
-            <th>创建时间</th>
-            <th>更新时间</th>
+            <th>运输成本</th>
+            <th>总价值</th>
             <th>操作</th>
         </tr>
     </thead>
@@ -38,23 +37,16 @@
         <tr>
             <td>{{ product.sku }}</td>
             <td>{{ product.chinese_name }}</td>
-            <td>${{ product.price }}</td>
+            <td>{{ product.price }}</td>
             <td>{{ product.category }}</td>
             <td>{{ product.weight }}</td>
             <td>{{ product.volume }}</td>
-            <td>
-                {% if product.image %}
-                    <img src="{{ product.image.url }}" alt="{{ product.name }}" width="50">
-                {% else %}
-                    无图片
-                {% endif %}
-            </td>
             <td>{{ product.stock }}</td>
-            <td>{{ product.created_at }}</td>
-            <td>{{ product.updated_at }}</td>
+            <td>{{ product.shipping_cost }}</td>
+            <td>{{ product.total_value }}</td>
             <td>
-                <a href="{% url 'edit_product' product.id %}">编辑</a> |
-                <a href="{% url 'delete_product' product.id %}">删除</a>
+                <a href="{% url 'edit_product' product.pk %}" class="btn btn-primary btn-sm">编辑</a>
+                <a href="{% url 'delete_product' product.pk %}" class="btn btn-danger btn-sm">删除</a>
             </td>
         </tr>
         {% endfor %}

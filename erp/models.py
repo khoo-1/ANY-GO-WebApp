@@ -11,19 +11,22 @@ class Warehouse(models.Model):
         return self.name  # 返回仓库名称作为字符串表示
 
 class Product(models.Model):
-    sku = models.CharField(max_length=100, unique=True)  # SKU（库存单位），最大长度为100个字符，唯一
-    chinese_name = models.CharField(max_length=200)  # 中文名称，最大长度为200个字符，非空
-    price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # 产品价格，最多10位数字，小数点后保留2位，可以为空
-    category = models.CharField(max_length=100, blank=True, null=True)  # 产品类别，最大长度为100个字符，可以为空
-    weight = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # 产品重量，最多10位数字，小数点后保留2位，可以为空
-    volume = models.CharField(max_length=100, blank=True, null=True)  # 产品体积，最大长度为100个字符，可以为空
-    image = models.ImageField(upload_to='products/', null=True, blank=True)  # 产品图片，上传路径为'products/'，允许为空
-    stock = models.IntegerField(blank=True, null=True)  # 库存数量，使用整数字段，可以为空
-    created_at = models.DateTimeField(default=timezone.now)  # 创建时间，默认值为当前时间
-    updated_at = models.DateTimeField(auto_now=True)  # 更新时间，自动设置为当前时间
+    sku = models.CharField(max_length=100, unique=True, verbose_name="SKU")
+    chinese_name = models.CharField(max_length=200, verbose_name="中文名称")
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="价格")
+    category = models.CharField(max_length=50, choices=[('普货', '普货'), ('纺织', '纺织'), ('混装', '混装')], default='普货', verbose_name="类别")
+    weight = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="重量")
+    volume = models.CharField(max_length=100, blank=True, verbose_name="体积")
+    stock = models.IntegerField(default=0, verbose_name="库存")
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="头程成本")
+    total_value = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="总货值")
 
     def __str__(self):
-        return self.chinese_name  # 返回中文名称作为字符串表示
+        return f"{self.sku} - {self.chinese_name}"
+
+    class Meta:
+        verbose_name = "产品"
+        verbose_name_plural = "产品"
 
 class Inventory(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)  # 关联的产品，外键，级联删除
@@ -43,8 +46,6 @@ class PackingList(models.Model):
     total_items = models.IntegerField()  # 总件数
     type = models.CharField(max_length=100)  # 类型
     total_price = models.DecimalField(max_digits=10, decimal_places=2)  # 总价格
-    created_at = models.DateTimeField(default=timezone.now)  # 创建时间
-    updated_at = models.DateTimeField(auto_now=True)  # 更新时间
 
     def __str__(self):
         return self.name  # 返回装箱单名称作为字符串表示

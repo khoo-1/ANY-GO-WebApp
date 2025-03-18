@@ -16,4 +16,5 @@ urlpatterns = [
     path('bulk_upload/', views.bulk_upload, name='bulk_upload'),
     path('save_bulk_upload/', views.save_bulk_upload, name='save_bulk_upload'),
     path('bulk-product-upload/', views.bulk_product_upload, name='bulk_product_upload'),
+    path('clear-all-data/', views.clear_all_data, name='clear_all_data'),
 ]
