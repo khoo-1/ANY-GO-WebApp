@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from decimal import Decimal
 
 # 创建你的模型
 
@@ -10,6 +11,16 @@ class Warehouse(models.Model):
     def __str__(self):
         return self.name  # 返回仓库名称作为字符串表示
 
+class Shop(models.Model):
+    name = models.CharField(max_length=50, verbose_name="店铺名称")
+    
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        verbose_name = "店铺"
+        verbose_name_plural = "店铺"
+
 class Product(models.Model):
     sku = models.CharField(max_length=100, unique=True, verbose_name="SKU")
     chinese_name = models.CharField(max_length=200, verbose_name="中文名称")
@@ -17,9 +28,41 @@ class Product(models.Model):
     category = models.CharField(max_length=50, choices=[('普货', '普货'), ('纺织', '纺织'), ('混装', '混装')], default='普货', verbose_name="类别")
     weight = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="重量")
     volume = models.CharField(max_length=100, blank=True, verbose_name="体积")
-    stock = models.IntegerField(default=0, verbose_name="库存")
+    
+    # 增加店铺字段，允许为空
+    shop = models.ForeignKey(Shop, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="所属店铺")
+    
+    # 拆分库存字段
+    stock_in_warehouse = models.IntegerField(default=0, verbose_name="在库数量")
+    stock_arrived = models.IntegerField(default=0, verbose_name="到岸数量")
+    stock_in_transit = models.IntegerField(default=0, verbose_name="在途数量")
+    
+    # 原库存字段，计算得出
+    stock = models.IntegerField(default=0, verbose_name="总库存")
+    
     shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="头程成本")
+    
+    # 拆分货值字段
+    value_in_warehouse = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="在库货值")
+    value_arrived = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="到岸货值")
+    value_in_transit = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="在途货值")
+    
+    # 原总货值字段，计算得出
     total_value = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="总货值")
+
+    def save(self, *args, **kwargs):
+        # 计算总库存
+        self.stock = self.stock_in_warehouse + self.stock_arrived + self.stock_in_transit
+        
+        # 计算总货值 - 确保所有值都是Decimal类型
+        # 确保所有值都转换为Decimal再进行计算
+        warehouse_value = Decimal(str(self.value_in_warehouse))
+        arrived_value = Decimal(str(self.value_arrived))
+        transit_value = Decimal(str(self.value_in_transit))
+        
+        self.total_value = warehouse_value + arrived_value + transit_value
+        
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.sku} - {self.chinese_name}"
@@ -58,16 +101,6 @@ class PackingListItem(models.Model):
     def __str__(self):
         return f"{self.product.chinese_name} - {self.quantity}"
 
-class Shop(models.Model):
-    name = models.CharField(max_length=50, verbose_name="店铺名称")
-    
-    def __str__(self):
-        return self.name
-    
-    class Meta:
-        verbose_name = "店铺"
-        verbose_name_plural = "店铺"
-
 class ShipmentOrder(models.Model):
     STATUS_CHOICES = [
         ('在途', '在途'),
@@ -85,15 +118,17 @@ class ShipmentOrder(models.Model):
     
     def calculate_total_value(self):
         """计算总货值"""
-        total_value = 0
+        total_value = Decimal('0.00')
         for item in self.items.all():
             if self.status == '在途':
                 # 在途状态：货值 = 采购成本 * 数量
-                total_value += item.purchase_cost * item.quantity
+                item_value = Decimal(str(item.purchase_cost)) * Decimal(str(item.quantity))
+                total_value = total_value + item_value
             else:
                 # 到岸状态：货值 = (采购成本 + 头程成本) * 数量
-                total_value += (item.purchase_cost + item.shipping_cost) * item.quantity
-        return total_value
+                item_value = (Decimal(str(item.purchase_cost)) + Decimal(str(item.shipping_cost))) * Decimal(str(item.quantity))
+                total_value = total_value + item_value
+        return total_value.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
     
     class Meta:
         verbose_name = "发货单"

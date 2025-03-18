@@ -15,7 +15,7 @@
                     <a class="nav-link" href="{% url 'product_list' %}">产品列表</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'inventory_list' %}">库存列表</a>
+                    <a class="nav-link" href="{% url 'inventory_list' %}">库存统计</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'shipment_list' %}">发货单</a>
@@ -25,7 +25,7 @@
                         导入数据
                     </a>
                     <div class="dropdown-menu" aria-labelledby="navbarDropdown">
-                        <a class="dropdown-item" href="{% url 'add_product' %}">单个产品导入</a>
+                        <a class="dropdown-item" href="{% url 'import_inventory' %}">在库数据导入</a>
                         <a class="dropdown-item" href="{% url 'shipment_import' %}">发货单导入</a>
                     </div>
                 </li>

@@ -1,0 +1,58 @@
+{% extends "erp/base.html" %}
+
+{% block title %}导入在库数据{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">导入在库数据</h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info" role="alert">
+                <h6 class="alert-heading">导入说明:</h6>
+                <ul>
+                    <li>Excel文件必须包含以下列: <strong>SKU</strong>, <strong>数量</strong>, <strong>采购成本</strong>, <strong>头程成本</strong>, <strong>店铺</strong>, <strong>中文名称</strong></li>
+                    <li>导入前系统会清空现有在库数据（到岸和在途数据不会受影响）</li>
+                    <li>导入的数据将<strong>仅计入在库数据</strong>，不会影响到岸和在途数据统计</li>
+                    <li>请确保"店铺"列的店铺名称准确，系统将为每个店铺创建相应的在库数据关联</li>
+                    <li>同一SKU如果在多个店铺都有库存，需要在Excel中分多行录入，每行对应一个店铺</li>
+                    <li>总货值将自动计算为: (采购成本 + 头程成本) × 数量</li>
+                </ul>
+            </div>
+            
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="file">上传Excel文件:</label>
+                    <div class="custom-file">
+                        <input type="file" class="custom-file-input" id="file" name="file" accept=".xlsx, .xls" required>
+                        <label class="custom-file-label" for="file">选择文件...</label>
+                    </div>
+                    <small class="form-text text-muted">支持.xlsx和.xls格式的Excel文件</small>
+                </div>
+                
+                <div class="form-group mt-4">
+                    <button type="submit" class="btn btn-primary">导入数据</button>
+                    <a href="{% url 'inventory_list' %}" class="btn btn-secondary ml-2">返回库存列表</a>
+                </div>
+            </form>
+            
+            <!-- 模板下载按钮 -->
+            <hr>
+            <h6>模板下载</h6>
+            <a href="{% url 'download_inventory_template' %}" class="btn btn-outline-primary btn-sm">下载导入模板</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 显示选择的文件名
+    document.querySelector('.custom-file-input').addEventListener('change', function(e) {
+        var fileName = this.files[0].name;
+        var nextSibling = e.target.nextElementSibling;
+        nextSibling.innerText = fileName;
+    });
+</script>
+{% endblock %} 

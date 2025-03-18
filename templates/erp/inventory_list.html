@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>库存总览</h2>
+        <div>
+            <a href="{% url 'import_inventory' %}" class="btn btn-primary">导入库存</a>
+            <a href="{% url 'export_inventory' %}" class="btn btn-success">导出库存</a>
+        </div>
+    </div>
+
+    <!-- 总计摘要 -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">在库总量</h5>
+                    <p class="card-text display-6">{{ total_in_warehouse_quantity }}</p>
+                    <p class="card-text">总价值: ¥{{ total_in_warehouse_value|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">到岸总量</h5>
+                    <p class="card-text display-6">{{ total_arrived_quantity }}</p>
+                    <p class="card-text">总价值: ¥{{ total_arrived_value|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">在途总量</h5>
+                    <p class="card-text display-6">{{ total_in_transit_quantity }}</p>
+                    <p class="card-text">总价值: ¥{{ total_in_transit_value|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 店铺库存列表 -->
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">各店铺库存</h5>
+                <span class="badge bg-primary">店铺数: {{ shop_data|length }}</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>店铺名称</th>
+                            <th>在库数量</th>
+                            <th>在库价值</th>
+                            <th>到岸数量</th>
+                            <th>到岸价值</th>
+                            <th>在途数量</th>
+                            <th>在途价值</th>
+                            <th>总数量</th>
+                            <th>总价值</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for shop in shop_data %}
+                        <tr>
+                            <td>{{ shop.name }}</td>
+                            <td>{{ shop.in_warehouse_quantity }}</td>
+                            <td>¥{{ shop.in_warehouse_value|floatformat:2 }}</td>
+                            <td>{{ shop.arrived_quantity }}</td>
+                            <td>¥{{ shop.arrived_value|floatformat:2 }}</td>
+                            <td>{{ shop.in_transit_quantity }}</td>
+                            <td>¥{{ shop.in_transit_value|floatformat:2 }}</td>
+                            <td>{{ shop.total_quantity }}</td>
+                            <td>¥{{ shop.total_value|floatformat:2 }}</td>
+                            <td>
+                                <a href="{% url 'product_list' %}?shop={{ shop.id }}" class="btn btn-sm btn-primary">查看产品</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center py-4">暂无库存数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
