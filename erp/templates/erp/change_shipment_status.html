@@ -1,0 +1,21 @@
+{% extends 'erp/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>变更发货单状态</h2>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">批次号：{{ shipment.batch_number }}</h5>
+            <p class="card-text">店铺：{{ shipment.shop.name }}</p>
+            <form method="post">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="total_price" class="form-label">总价格</label>
+                    <input type="number" step="0.01" class="form-control" id="total_price" name="total_price" required>
+                </div>
+                <button type="submit" class="btn btn-primary">确认到岸</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

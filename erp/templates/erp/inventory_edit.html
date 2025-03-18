@@ -1,0 +1,25 @@
+{% extends 'erp/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>编辑库存</h2>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">产品信息</h5>
+            <p class="card-text">SKU: {{ inventory.product.sku }}</p>
+            <p class="card-text">中文名称: {{ inventory.product.chinese_name }}</p>
+            <p class="card-text">仓库: {{ inventory.warehouse.name }}</p>
+            
+            <form method="post">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="stock" class="form-label">库存数量</label>
+                    <input type="number" class="form-control" id="stock" name="stock" value="{{ inventory.stock }}" required>
+                </div>
+                <button type="submit" class="btn btn-primary">保存</button>
+                <a href="{% url 'inventory_list' %}" class="btn btn-secondary">返回</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

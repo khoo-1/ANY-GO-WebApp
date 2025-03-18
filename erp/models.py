@@ -57,3 +57,59 @@ class PackingListItem(models.Model):
 
     def __str__(self):
         return f"{self.product.chinese_name} - {self.quantity}"
+
+class Shop(models.Model):
+    name = models.CharField(max_length=50, verbose_name="店铺名称")
+    
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        verbose_name = "店铺"
+        verbose_name_plural = "店铺"
+
+class ShipmentOrder(models.Model):
+    STATUS_CHOICES = [
+        ('在途', '在途'),
+        ('到岸', '到岸'),
+    ]
+    
+    batch_number = models.CharField(max_length=50, unique=True, verbose_name="批次号")
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, verbose_name="店铺")
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="总价格")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='在途', verbose_name="状态")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
+    
+    def __str__(self):
+        return f"{self.batch_number} - {self.shop.name}"
+    
+    def calculate_total_value(self):
+        """计算总货值"""
+        total_value = 0
+        for item in self.items.all():
+            if self.status == '在途':
+                # 在途状态：货值 = 采购成本 * 数量
+                total_value += item.purchase_cost * item.quantity
+            else:
+                # 到岸状态：货值 = (采购成本 + 头程成本) * 数量
+                total_value += (item.purchase_cost + item.shipping_cost) * item.quantity
+        return total_value
+    
+    class Meta:
+        verbose_name = "发货单"
+        verbose_name_plural = "发货单"
+
+class ShipmentItem(models.Model):
+    shipment_order = models.ForeignKey(ShipmentOrder, related_name='items', on_delete=models.CASCADE, verbose_name="发货单")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name="产品")
+    quantity = models.IntegerField(verbose_name="数量")
+    purchase_cost = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="采购成本")
+    volume = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="体积")
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="头程成本")
+    
+    def __str__(self):
+        return f"{self.product.sku} - {self.quantity}"
+    
+    class Meta:
+        verbose_name = "发货单项目"
+        verbose_name_plural = "发货单项目"

@@ -1,0 +1,36 @@
+{% extends 'erp/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>导入发货单</h2>
+    <div class="card">
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="batch_number" class="form-label">批次号</label>
+                    <input type="text" class="form-control" id="batch_number" name="batch_number" required>
+                </div>
+                <div class="mb-3">
+                    <label for="shop" class="form-label">店铺</label>
+                    <select class="form-select" id="shop" name="shop" required>
+                        <option value="">--请选择店铺--</option>
+                        {% for shop in shops %}
+                        <option value="{{ shop.id }}">{{ shop.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="file" class="form-label">Excel文件</label>
+                    <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls" required>
+                </div>
+                <div class="d-flex">
+                    <button type="submit" class="btn btn-primary me-2">导入</button>
+                    <a href="{% url 'shipment_list' %}" class="btn btn-secondary me-2">返回</a>
+                    <a href="{% url 'download_shipment_template' %}" class="btn btn-outline-primary">下载模板</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

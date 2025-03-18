@@ -1,0 +1,94 @@
+{% extends "erp/base.html" %}
+{% load erp_filters %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>发货单详情</h2>
+        <div>
+            <a href="{% url 'export_shipment_detail' shipment.pk %}" class="btn btn-success me-2">导出Excel</a>
+            <a href="{% url 'shipment_list' %}" class="btn btn-secondary">返回列表</a>
+        </div>
+    </div>
+    
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">基本信息</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <p><strong>批次号：</strong>{{ shipment.batch_number }}</p>
+                </div>
+                <div class="col-md-3">
+                    <p><strong>店铺：</strong>{{ shipment.shop.name }}</p>
+                </div>
+                <div class="col-md-3">
+                    <p><strong>状态：</strong>
+                        <span class="badge {% if shipment.status == '在途' %}bg-warning{% else %}bg-success{% endif %}">
+                            {{ shipment.status }}
+                        </span>
+                    </p>
+                </div>
+                <div class="col-md-3">
+                    <p><strong>创建时间：</strong>{{ shipment.created_at|date:"Y-m-d H:i" }}</p>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <p><strong>总价格：</strong>{{ shipment.total_price }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>总货值：</strong>{{ shipment.calculate_total_value }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">商品明细</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>中文名称</th>
+                            <th>数量</th>
+                            <th>采购成本</th>
+                            <th>体积</th>
+                            <th>头程成本</th>
+                            <th>货值</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td>{{ item.product.sku }}</td>
+                            <td>{{ item.product.chinese_name }}</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>{{ item.purchase_cost }}</td>
+                            <td>{{ item.volume }}</td>
+                            <td>{{ item.shipping_cost }}</td>
+                            <td>
+                                {% if shipment.status == '在途' %}
+                                    {{ item.purchase_cost|multiply:item.quantity }}
+                                {% else %}
+                                    {{ item.purchase_cost|add:item.shipping_cost|multiply:item.quantity }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">暂无商品数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -18,7 +18,7 @@
                     <a class="nav-link" href="{% url 'inventory_list' %}">库存列表</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'packing_list' %}">装箱单</a>
+                    <a class="nav-link" href="{% url 'shipment_list' %}">发货单</a>
                 </li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -26,8 +26,7 @@
                     </a>
                     <div class="dropdown-menu" aria-labelledby="navbarDropdown">
                         <a class="dropdown-item" href="{% url 'add_product' %}">单个产品导入</a>
-                        <a class="dropdown-item" href="{% url 'bulk_upload' %}">装箱单导入</a>
-                        <a class="dropdown-item" href="{% url 'bulk_product_upload' %}">批量产品导入</a>
+                        <a class="dropdown-item" href="{% url 'shipment_import' %}">发货单导入</a>
                     </div>
                 </li>
             </ul>

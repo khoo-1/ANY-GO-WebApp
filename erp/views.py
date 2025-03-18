@@ -3,8 +3,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
-from .forms import ProductForm
-from .models import Product, Inventory, PackingList, PackingListItem
+from .forms import ProductForm, ShipmentOrderForm
+from .models import Product, Inventory, PackingList, PackingListItem, ShipmentOrder, ShipmentItem, Shop
 import subprocess
 import os
 import json
@@ -15,7 +15,13 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 import traceback
 from django.contrib.auth.decorators import login_required
+from decimal import Decimal
+import datetime
+import uuid
 
+def index(request):
+    """首页视图"""
+    return render(request, 'erp/index.html')
 
 def product_list(request):
     query = request.GET.get("q")
@@ -103,8 +109,8 @@ def bulk_upload(request):
             # 保存上传的文件
             uploaded_file = request.FILES["file"]
             file_path = handle_uploaded_file(uploaded_file)
-            
-            # 读取Excel文件
+
+        # 读取Excel文件
             xls = pd.ExcelFile(file_path)
             
             # 获取所有sheet名称
@@ -152,7 +158,7 @@ def bulk_upload(request):
                         total_boxes=packing_info["total_boxes"],
                         total_weight=packing_info["total_weight"],
                         total_volume=packing_info["total_volume"],
-                        total_side_volume=packing_info["total_side_volume"],
+                        total_side_plus_one_volume=packing_info["total_side_volume"],
                         total_items=packing_info["total_items"],
                         type=packing_info["packing_type"],
                         total_price=packing_info["total_price"]
@@ -184,9 +190,13 @@ def bulk_upload(request):
     return render(request, "erp/bulk_upload.html")
 
 
-# 添加清除所有数据库的函数
 def clear_all_data(request):
+    """清除所有数据"""
     if request.method == "POST":
+        # 清除所有发货单项目
+        ShipmentItem.objects.all().delete()
+        # 清除所有发货单
+        ShipmentOrder.objects.all().delete()
         # 清除所有装箱单项目
         PackingListItem.objects.all().delete()
         # 清除所有装箱单
@@ -197,7 +207,7 @@ def clear_all_data(request):
         Inventory.objects.all().delete()
 
         messages.success(request, "所有数据已成功清除")
-        return redirect("packing_list")
+        return redirect("product_list")
 
     return render(request, "erp/clear_data.html")
 
@@ -428,7 +438,7 @@ def handle_uploaded_file(uploaded_file):
     with open(file_path, "wb+") as destination:
         for chunk in uploaded_file.chunks():
             destination.write(chunk)
-    
+
     return file_path
 
 
@@ -522,16 +532,16 @@ def process_sku_data(df, packing_list):
                     product.chinese_name = chinese_name
                 except Product.DoesNotExist:
                     product = Product(
-                        sku=sku,
-                        chinese_name=chinese_name,
-                        price=0.0,
-                        category=packing_list.type,
-                        weight=0.0,
-                        volume=0.0,
-                        stock=0,
+                            sku=sku,
+                            chinese_name=chinese_name,
+                            price=0.0,
+                            category=packing_list.type,
+                            weight=0.0,
+                            volume=0.0,
+                            stock=0,
                     )
                 product.save()
-                
+            
                 # 计算数量
                 quantity = 0
                 for col_idx in range(5, df.shape[1]):  # 从F列开始
@@ -557,3 +567,282 @@ def process_sku_data(df, packing_list):
                     records_count += 1
     
     return records_count
+
+
+def download_shipment_template(request):
+    """下载发货单导入模板"""
+    # 创建一个新的DataFrame
+    df = pd.DataFrame({
+        'SKU': ['示例SKU'],
+        '中文名称': ['示例产品'],
+        '采购成本': [0.00],
+        '体积': [0.00],
+        '数量': [0]
+    })
+    
+    # 创建一个 HttpResponse 对象
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename=shipment_template.xlsx'
+    
+    # 将DataFrame写入Excel
+    with pd.ExcelWriter(response, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='发货单', index=False)
+        
+        # 获取工作表
+        worksheet = writer.sheets['发货单']
+        
+        # 设置列宽
+        worksheet.set_column('A:A', 15)  # SKU
+        worksheet.set_column('B:B', 20)  # 中文名称
+        worksheet.set_column('C:C', 12)  # 采购成本
+        worksheet.set_column('D:D', 12)  # 体积
+        worksheet.set_column('E:E', 10)  # 数量
+    
+    return response
+
+
+def shipment_import(request):
+    """发货单导入视图"""
+    if request.method == 'POST':
+        try:
+            file = request.FILES.get('file')
+            shop_id = request.POST.get('shop')
+            batch_number = request.POST.get('batch_number')
+            
+            if not file:
+                messages.error(request, '请选择要上传的文件')
+                shops = Shop.objects.all()
+                return render(request, 'erp/shipment_import.html', {'shops': shops})
+            
+            if not shop_id:
+                messages.error(request, '请选择店铺')
+                shops = Shop.objects.all()
+                return render(request, 'erp/shipment_import.html', {'shops': shops})
+            
+            if not batch_number:
+                messages.error(request, '请输入批次号')
+                shops = Shop.objects.all()
+                return render(request, 'erp/shipment_import.html', {'shops': shops})
+            
+            # 检查批次号是否已存在
+            if ShipmentOrder.objects.filter(batch_number=batch_number).exists():
+                messages.error(request, '该批次号已存在')
+                shops = Shop.objects.all()
+                return render(request, 'erp/shipment_import.html', {'shops': shops})
+            
+            # 保存上传的文件
+            file_path = handle_uploaded_file(file)
+
+            # 读取Excel文件
+            df = pd.read_excel(file_path)
+                
+            # 验证必要的列是否存在
+            required_columns = ['SKU', '数量', '采购成本', '体积']
+            if not all(col in df.columns for col in required_columns):
+                messages.error(request, '文件格式不正确，请使用正确的模板')
+                shops = Shop.objects.all()
+                return render(request, 'erp/shipment_import.html', {'shops': shops})
+            
+            # 创建发货单
+            shop = Shop.objects.get(id=shop_id)
+            shipment = ShipmentOrder.objects.create(
+                batch_number=batch_number,
+                shop=shop,
+                status='在途'
+            )
+            
+            # 处理每一行数据
+            total_price = 0
+            for _, row in df.iterrows():
+                sku = str(row['SKU']).strip()
+                quantity = int(row['数量'])
+                purchase_cost = float(row['采购成本'])
+                volume = float(row['体积'])
+                
+                # 获取或创建产品
+                product, created = Product.objects.get_or_create(
+                    sku=sku,
+                    defaults={
+                        'chinese_name': row.get('中文名称', ''),
+                        'price': purchase_cost,
+                        'volume': volume
+                    }
+                )
+                
+                # 创建发货单项目
+                ShipmentItem.objects.create(
+                    shipment=shipment,
+                    product=product,
+                    quantity=quantity,
+                    purchase_cost=purchase_cost,
+                    volume=volume
+                )
+                
+                total_price += purchase_cost * quantity
+            
+            # 更新发货单总价格
+            shipment.total_price = total_price
+            shipment.save()
+            
+            # 删除临时文件
+            os.remove(file_path)
+            
+            messages.success(request, '发货单导入成功')
+            return redirect('shipment_list')
+            
+        except Exception as e:
+            messages.error(request, f'导入失败：{str(e)}')
+            if 'file_path' in locals():
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+            shops = Shop.objects.all()
+            return render(request, 'erp/shipment_import.html', {'shops': shops})
+    
+    shops = Shop.objects.all()
+    return render(request, 'erp/shipment_import.html', {'shops': shops})
+
+
+def shipment_list(request):
+    """发货单列表"""
+    shipments = ShipmentOrder.objects.all().order_by('-created_at')
+    return render(request, 'erp/shipment_list.html', {'shipments': shipments})
+
+
+def shipment_detail(request, pk):
+    """发货单详情"""
+    shipment = get_object_or_404(ShipmentOrder, pk=pk)
+    items = shipment.items.all()
+    return render(request, 'erp/shipment_detail.html', {
+        'shipment': shipment,
+        'items': items
+    })
+
+
+def change_shipment_status(request, shipment_id):
+    """变更发货单状态为到岸，并分摊头程成本"""
+    shipment = get_object_or_404(ShipmentOrder, id=shipment_id)
+    
+    if request.method == 'POST':
+        total_price = request.POST.get('total_price')
+        if total_price:
+            try:
+                total_price = Decimal(total_price)
+                
+                # 计算所有物品的总体积
+                items = ShipmentItem.objects.filter(shipment_order=shipment)
+                total_volume = Decimal('0')
+                for item in items:
+                    total_volume += Decimal(str(item.volume)) * Decimal(str(item.quantity))
+                
+                if total_volume > 0:
+                    # 更新发货单总价格
+                    shipment.total_price = total_price
+                    shipment.status = '到岸'
+                    shipment.save()
+                    
+                    # 为每个物品计算头程成本
+                    for item in items:
+                        try:
+                            # 计算这个物品占总体积的比例
+                            item_volume = Decimal(str(item.volume)) * Decimal(str(item.quantity))
+                            volume_ratio = item_volume / total_volume
+                            
+                            # 计算这个物品应分摊的头程成本
+                            item_shipping_cost = total_price * volume_ratio
+                            
+                            # 计算单个物品的头程成本
+                            if item.quantity > 0:  # 防止除以零
+                                per_item_shipping_cost = item_shipping_cost / Decimal(str(item.quantity))
+                                # 保留两位小数
+                                per_item_shipping_cost = per_item_shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                            else:
+                                per_item_shipping_cost = Decimal('0.00')
+                            
+                            # 更新物品的头程成本
+                            item.shipping_cost = per_item_shipping_cost
+                            item.save()
+                            
+                            # 同时更新产品的头程成本
+                            product = item.product
+                            product.shipping_cost = per_item_shipping_cost
+                            # 保留两位小数
+                            product.shipping_cost = product.shipping_cost.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                            product.save()
+                        except Exception as e:
+                            messages.error(request, f"处理物品 {item.product.sku} 时出错：{str(e)}")
+                            continue
+                    
+                    messages.success(request, "发货单状态已更新为到岸，并已分摊头程成本")
+                    return redirect('shipment_list')
+                else:
+                    messages.error(request, "总体积为零，无法分摊头程成本")
+            except ValueError:
+                messages.error(request, "请输入有效的总价格")
+        else:
+            messages.error(request, "请输入总价格")
+    
+    return render(request, 'erp/change_shipment_status.html', {'shipment': shipment})
+
+
+def delete_shipment(request, pk):
+    """删除发货单"""
+    shipment = get_object_or_404(ShipmentOrder, pk=pk)
+    if request.method == 'POST':
+        shipment.delete()
+        messages.success(request, '发货单已删除')
+        return redirect('shipment_list')
+    return render(request, 'erp/delete_shipment.html', {'shipment': shipment})
+
+
+def inventory_edit(request, pk):
+    """编辑库存视图"""
+    inventory = get_object_or_404(Inventory, pk=pk)
+    if request.method == "POST":
+        inventory.stock = request.POST.get("stock")
+        inventory.save()
+        messages.success(request, "库存更新成功")
+        return redirect("inventory_list")
+    return render(request, "erp/inventory_edit.html", {"inventory": inventory})
+
+
+def export_shipment_detail(request, pk):
+    """导出发货单商品明细"""
+    shipment = get_object_or_404(ShipmentOrder, pk=pk)
+    items = ShipmentItem.objects.filter(shipment_order=shipment)
+    
+    # 创建商品明细数据
+    items_data = []
+    for item in items:
+        items_data.append({
+            'SKU': item.product.sku,
+            '中文名称': item.product.chinese_name,
+            '数量': item.quantity,
+            '采购成本': item.purchase_cost,
+            '体积': item.volume,
+            '头程成本': item.shipping_cost,
+            '货值': item.purchase_cost * item.quantity + (item.shipping_cost * item.quantity if shipment.status == '到岸' else 0)
+        })
+    
+    # 创建DataFrame
+    df = pd.DataFrame(items_data)
+    
+    # 创建Excel响应
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename=shipment_{shipment.batch_number}_items.xlsx'
+    
+    # 使用xlsxwriter引擎写入Excel
+    with pd.ExcelWriter(response, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+        
+        # 获取worksheet对象
+        worksheet = writer.sheets['Sheet1']
+        
+        # 设置列宽
+        for idx, col in enumerate(df.columns):
+            worksheet.set_column(idx, idx, 15)
+    
+    return response
