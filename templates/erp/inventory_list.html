@@ -4,7 +4,7 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>库存总览</h2>
-        <div>
+        <div class="btn-group">
             <a href="{% url 'import_inventory' %}" class="btn btn-primary">导入库存</a>
             <a href="{% url 'export_inventory' %}" class="btn btn-success">导出库存</a>
         </div>
@@ -51,7 +51,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped table-hover mb-0">
+                <table class="table table-striped table-hover align-middle mb-0">
                     <thead>
                         <tr>
                             <th>店铺名称</th>
@@ -79,7 +79,9 @@
                             <td>{{ shop.total_quantity }}</td>
                             <td>¥{{ shop.total_value|floatformat:2 }}</td>
                             <td>
-                                <a href="{% url 'product_list' %}?shop={{ shop.id }}" class="btn btn-sm btn-primary">查看产品</a>
+                                <div class="btn-group">
+                                    <a href="{% url 'product_list' %}?shop={{ shop.id }}" class="btn btn-sm btn-primary">查看产品</a>
+                                </div>
                             </td>
                         </tr>
                         {% empty %}
@@ -93,4 +95,4 @@
         </div>
     </div>
 </div>
-{% endblock %} 
+{% endblock %}
