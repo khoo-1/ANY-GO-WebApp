@@ -8,12 +8,18 @@ class ProductForm(forms.ModelForm):
         fields = [
             'sku',
             'chinese_name',
-            'price',
-            'category',
+            'purchase_cost',
             'weight',
             'volume',
+            'shop',
+            'stock_in_warehouse',
+            'stock_arrived',
+            'stock_in_transit',
             'stock',
             'shipping_cost',
+            'value_in_warehouse',
+            'value_arrived',
+            'value_in_transit',
             'total_value'
         ]
 

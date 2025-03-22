@@ -1,7 +1,0 @@
-<h2>删除产品</h2>
-<p>你确定要删除产品 "{{ product.chinese_name }}" 吗？</p>
-<form method="post">
-    {% csrf_token %}
-    <button type="submit">删除</button>
-    <a href="{% url 'product_list' %}">取消</a>
-</form>

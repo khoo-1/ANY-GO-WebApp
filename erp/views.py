@@ -4,7 +4,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
 from .forms import ProductForm, ShipmentOrderForm
-from .models import Product, Inventory, PackingList, PackingListItem, ShipmentOrder, ShipmentItem, Shop
+from .models import Product, Inventory, ShipmentOrder, ShipmentItem, Shop
 import subprocess
 import os
 import json
@@ -16,10 +16,12 @@ from openpyxl.utils import get_column_letter
 import traceback
 from django.contrib.auth.decorators import login_required
 from decimal import Decimal, InvalidOperation
-import datetime
+from datetime import datetime
 import uuid
 from django.db.models import Sum, F, DecimalField, Count, Case, When, Q, Value
 from django.db.models.functions import Coalesce
+import logging
+import csv
 
 def index(request):
     """首页视图"""
@@ -37,8 +39,6 @@ def product_list(request):
         products = products.filter(
             Q(sku__icontains=query)
             | Q(chinese_name__icontains=query)
-            | Q(price__icontains=query)
-            | Q(category__icontains=query)
             | Q(weight__icontains=query)
             | Q(volume__icontains=query)
         )
@@ -62,7 +62,7 @@ def product_list(request):
     # 获取所有店铺，用于筛选
     shops = Shop.objects.all()
     
-    return render(request, "erp/product_list.html", {
+    return render(request, "erp/product/list.html", {
         "page_obj": page_obj,
         "shops": shops,
         "current_shop": shop_id
@@ -80,14 +80,13 @@ def export_products(request):
             'SKU': product.sku,
             '中文名称': product.chinese_name,
             '店铺': product.shop.name if product.shop else '-',
-            '价格': str(product.price),
-            '类别': product.category,
             '重量': str(product.weight),
             '体积': product.volume,
             '在库数量': product.stock_in_warehouse,
             '到岸数量': product.stock_arrived,
             '在途数量': product.stock_in_transit,
             '总库存': product.stock,
+            '采购成本': str(product.purchase_cost),
             '头程成本': str(product.shipping_cost),
             '在库货值': str(product.value_in_warehouse),
             '到岸货值': str(product.value_arrived),
@@ -121,7 +120,7 @@ def export_products(request):
 
 def product_detail(request, pk):
     product = get_object_or_404(Product, pk=pk)
-    return render(request, "erp/product_detail.html", {"product": product})
+    return render(request, "erp/product/detail.html", {"product": product})
 
 
 def add_product(request):
@@ -132,182 +131,26 @@ def add_product(request):
             return redirect("product_list")
     else:
         form = ProductForm()
-    return render(request, "erp/add_product.html", {"form": form})
+    return render(request, "erp/product/add.html", {"form": form})
 
 
-def bulk_upload(request):
-    """批量上传视图"""
-    if request.method == 'POST' and request.FILES.get('file'):
-        try:
-            # 保存上传的文件
-            uploaded_file = request.FILES['file']
-            file_path = handle_uploaded_file(uploaded_file)
+def clear_data(request):
+    """清除所有数据的视图函数"""
+    if request.method == 'POST':
+        security_password = request.POST.get('security_password')
+        
+        if security_password == 'ANYGO1001':
+            # 直接清除所有数据
+            Product.objects.all().delete()
+            Shop.objects.all().delete()
             
-            # 读取Excel文件
-            df = pd.read_excel(file_path)
-            
-            # 检查必要的列是否存在
-            required_columns = ['SKU', '中文名称', '价格', '类别', '重量', '体积', '店铺']
-            if not all(col in df.columns for col in required_columns):
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                messages.error(request, '文件格式不正确，缺少必要的列')
-                return redirect('bulk_upload')
-            
-            # 去除空行
-            df = df.dropna(subset=['SKU'], how='any')
-            
-            # 处理数据
-            from decimal import Decimal
-            total_records = 0
-            
-            # 获取或创建店铺
-            shop_cache = {}  # 缓存店铺对象
-            
-            for _, row in df.iterrows():
-                try:
-                    # 获取店铺
-                    shop_name = row['店铺'] if pd.notna(row['店铺']) else None
-                    shop = None
-                    
-                    if shop_name:
-                        if shop_name in shop_cache:
-                            shop = shop_cache[shop_name]
-                        else:
-                            shop, _ = Shop.objects.get_or_create(name=shop_name)
-                            shop_cache[shop_name] = shop
-                    
-                    # 获取或创建产品
-                    sku = row['SKU']
-                    price = Decimal(str(row['价格'])) if pd.notna(row['价格']) else Decimal('0.00')
-                    
-                    defaults = {
-                        'chinese_name': row['中文名称'] if pd.notna(row['中文名称']) else '',
-                        'price': price.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP'),
-                        'category': row['类别'] if pd.notna(row['类别']) else '普货',
-                        'weight': Decimal(str(row['重量'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP') if pd.notna(row['重量']) else Decimal('0.00'),
-                        'volume': str(row['体积']) if pd.notna(row['体积']) else '',
-                        'shop': shop
-                    }
-                    
-                    # 查找或创建产品
-                    product, created = Product.objects.get_or_create(sku=sku, defaults=defaults)
-                    
-                    # 如果产品已存在，更新字段
-                    if not created:
-                        for key, value in defaults.items():
-                            setattr(product, key, value)
-                        product.save()
-                    
-                    records_count = 1
-                    total_records = total_records + records_count
-                    
-                except Exception as e:
-                    messages.warning(request, f'处理SKU {row.get("SKU", "未知")}时出错: {str(e)}')
-            
-            # 删除临时文件
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            
-            messages.success(request, f'成功导入/更新 {total_records} 个产品')
-            return redirect('product_list')
-            
-        except Exception as e:
-            messages.error(request, f'文件处理失败: {str(e)}')
+            messages.success(request, '所有数据已成功清除')
+            return redirect('index')
+        else:
+            messages.error(request, '安全密码错误')
+            return redirect(request.META.get('HTTP_REFERER', 'index'))
     
-    return render(request, 'erp/bulk_upload.html')
-
-
-def clear_all_data(request):
-    """清除所有数据"""
-    if request.method == "POST":
-        # 清除所有发货单项目
-        ShipmentItem.objects.all().delete()
-        # 清除所有发货单
-        ShipmentOrder.objects.all().delete()
-        # 清除所有装箱单项目
-        PackingListItem.objects.all().delete()
-        # 清除所有装箱单
-        PackingList.objects.all().delete()
-        # 清除所有产品
-        Product.objects.all().delete()
-        # 清除所有库存
-        Inventory.objects.all().delete()
-
-        messages.success(request, "所有数据已成功清除")
-        return redirect("product_list")
-
-    return render(request, "erp/clear_data.html")
-
-
-# 为了保持向后兼容性，保留bulk_product_upload函数但复用bulk_upload的逻辑
-def bulk_product_upload(request):
-    return bulk_upload(request)
-
-
-def save_bulk_upload(request):
-    if request.method == "POST":
-        data = json.loads(request.POST["data"])
-        df = pd.DataFrame(data)
-
-        # 装箱单名称
-        packing_list_name = "批量上传装箱单"
-
-        # 检查是否已存在同名的装箱单，如果存在则删除
-        existing_packing_list = PackingList.objects.filter(name=packing_list_name)
-        if existing_packing_list.exists():
-            print(f"发现同名装箱单: {packing_list_name}，将删除旧数据")
-            existing_packing_list.delete()
-            print(f"已删除同名装箱单: {packing_list_name}")
-
-        # 创建一个新的 PackingList 实例
-        packing_list = PackingList.objects.create(
-            name=packing_list_name,
-            total_boxes=0,
-            total_weight=0.0,
-            total_volume=0.0,
-            total_side_plus_one_volume=0.0,
-            total_items=len(df),
-            type="批量上传",
-            total_price=0.0,
-        )
-        
-        for index, row in df.iterrows():
-            try:
-                # 尝试获取现有产品
-                product = Product.objects.get(sku=row["sku"])
-                # 更新所有字段
-                product.chinese_name = row["中文名称"]
-                product.price = float(row["价格"]) if row["价格"] else 0.0
-                product.category = row["类别"]
-                product.weight = float(row["重量"]) if row["重量"] else 0.0
-                product.volume = float(row["体积"]) if row["体积"] else 0.0
-                product.stock = int(row["库存"]) if row["库存"] else 0
-            except Product.DoesNotExist:
-                # 如果产品不存在，创建新产品
-                product = Product(
-                    sku=row["sku"],
-                    chinese_name=row["中文名称"],
-                    price=float(row["价格"]) if row["价格"] else 0.0,
-                    category=row["类别"],
-                    weight=float(row["重量"]) if row["重量"] else 0.0,
-                    volume=float(row["体积"]) if row["体积"] else 0.0,
-                    stock=int(row["库存"]) if row["库存"] else 0,
-                )
-            
-            # 保存产品
-            product.save()
-
-            # 创建装箱单项目
-            PackingListItem.objects.create(
-                packing_list=packing_list,
-                product=product,
-                quantity=int(row["数量"]) if row["数量"] else 0,
-            )
-        
-        return redirect("packing_list")
-
-    return HttpResponse("无效的请求方法")
+    return redirect('index')
 
 
 def edit_product(request, pk):
@@ -327,7 +170,7 @@ def edit_product(request, pk):
         form = ProductForm(instance=product)
     
     # 渲染编辑产品页面，并传递表单对象
-    return render(request, "erp/edit_product.html", {"form": form})
+    return render(request, "erp/product/edit.html", {"form": form})
 
 
 def delete_product(request, pk):
@@ -335,104 +178,127 @@ def delete_product(request, pk):
     if request.method == "POST":
         product.delete()
         return redirect("product_list")
-    return render(request, "erp/delete_product.html", {"product": product})
+    return render(request, "erp/product/delete.html", {"product": product})
 
 
 def inventory_list(request):
     """库存列表视图"""
-    # 获取查询参数
-    shop_id = request.GET.get('shop', '')
-    sku = request.GET.get('sku', '')
-    chinese_name = request.GET.get('chinese_name', '')
-    category = request.GET.get('category', '')
+    logger = logging.getLogger(__name__)
     
-    # 基础查询
-    products = Product.objects.all().select_related('shop')
-    
-    # 应用筛选条件
-    if shop_id:
-        products = products.filter(shop_id=shop_id)
-    if sku:
-        products = products.filter(sku__icontains=sku)
-    if chinese_name:
-        products = products.filter(chinese_name__icontains=chinese_name)
-    if category and category != 'all':
-        products = products.filter(category=category)
-    
-    # 统计和汇总数据
-    from decimal import Decimal
-    
-    # 初始化汇总变量
-    total_in_warehouse_quantity = 0
-    total_in_warehouse_value = Decimal('0.00')
-    total_arrived_quantity = 0
-    total_arrived_value = Decimal('0.00')
-    total_in_transit_quantity = 0
-    total_in_transit_value = Decimal('0.00')
-    
-    # 按库存状态统计
-    in_stock_stats = {
-        'total_quantity': sum(p.stock_in_warehouse for p in products),
-        'total_value': sum(p.value_in_warehouse for p in products),
-    }
-    
-    arrived_stats = {
-        'total_quantity': sum(p.stock_arrived for p in products),
-        'total_value': sum(p.value_arrived for p in products),
-    }
-    
-    transit_stats = {
-        'total_quantity': sum(p.stock_in_transit for p in products),
-        'total_value': sum(p.value_in_transit for p in products),
-    }
-    
-    # 汇总数据
-    total_in_warehouse_quantity = total_in_warehouse_quantity + in_stock_stats['total_quantity']
-    total_in_warehouse_value = total_in_warehouse_value + Decimal(str(in_stock_stats['total_value']))
-    total_arrived_quantity = total_arrived_quantity + arrived_stats['total_quantity']
-    total_arrived_value = total_arrived_value + Decimal(str(arrived_stats['total_value']))
-    total_in_transit_quantity = total_in_transit_quantity + transit_stats['total_quantity']
-    total_in_transit_value = total_in_transit_value + Decimal(str(transit_stats['total_value']))
-    
-    # 计算总量
-    total_quantity = total_in_warehouse_quantity + total_arrived_quantity + total_in_transit_quantity
-    total_value = total_in_warehouse_value + total_arrived_value + total_in_transit_value
-    
-    # 分页处理
-    paginator = Paginator(products, 1000)  # 每页显示1000条
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
-    
-    # 准备上下文数据
-    context = {
-        'page_obj': page_obj,
-        'shops': Shop.objects.all(),
-        'selected_shop': shop_id,
-        'sku': sku,
-        'chinese_name': chinese_name,
-        'category': category,
-        'categories': [('普货', '普货'), ('纺织', '纺织'), ('混装', '混装')],
-        'stats': {
-            'in_warehouse': {
-                'quantity': total_in_warehouse_quantity,
-                'value': total_in_warehouse_value,
-            },
-            'arrived': {
-                'quantity': total_arrived_quantity,
-                'value': total_arrived_value,
-            },
-            'in_transit': {
-                'quantity': total_in_transit_quantity,
-                'value': total_in_transit_value,
-            },
-            'total': {
-                'quantity': total_quantity,
-                'value': total_value,
+    try:
+        # 检查是否有店铺数据
+        shops_count = Shop.objects.count()
+        logger.info(f"店铺总数: {shops_count}")
+        
+        # 检查是否有产品数据
+        products_count = Product.objects.count()
+        logger.info(f"产品总数: {products_count}")
+        
+        # 检查未关联店铺的产品
+        no_shop_products = Product.objects.filter(shop__isnull=True).count()
+        logger.info(f"未关联店铺的产品数: {no_shop_products}")
+        
+        if no_shop_products > 0:
+            # 列出未关联店铺的产品
+            for product in Product.objects.filter(shop__isnull=True)[:5]:  # 只显示前5个
+                logger.info(f"未关联店铺的产品: SKU={product.sku}, 名称={product.chinese_name}")
+        
+        # 检查各类型库存数量
+        in_warehouse_count = Product.objects.filter(stock_in_warehouse__gt=0).count()
+        arrived_count = Product.objects.filter(stock_arrived__gt=0).count()
+        in_transit_count = Product.objects.filter(stock_in_transit__gt=0).count()
+        
+        logger.info(f"在库产品数: {in_warehouse_count}")
+        logger.info(f"到岸产品数: {arrived_count}")
+        logger.info(f"在途产品数: {in_transit_count}")
+        
+        # 检查库存值异常的产品
+        abnormal_products = Product.objects.filter(
+            Q(stock_in_warehouse__lt=0) |
+            Q(stock_arrived__lt=0) |
+            Q(stock_in_transit__lt=0) |
+            Q(value_in_warehouse__lt=0) |
+            Q(value_arrived__lt=0) |
+            Q(value_in_transit__lt=0)
+        )
+        
+        if abnormal_products.exists():
+            logger.warning("发现库存值异常的产品:")
+            for product in abnormal_products[:5]:  # 只显示前5个
+                logger.warning(f"SKU={product.sku}, 在库={product.stock_in_warehouse}(¥{product.value_in_warehouse}), "
+                             f"到岸={product.stock_arrived}(¥{product.value_arrived}), "
+                             f"在途={product.stock_in_transit}(¥{product.value_in_transit})")
+        
+        # 使用annotate和values优化查询
+        from django.db.models import Sum, Value, F, DecimalField
+        from django.db.models.functions import Coalesce
+        from decimal import Decimal
+        
+        # 按店铺分组统计
+        shop_stats = Shop.objects.filter(name__regex=r'^[0-9]+号店$').annotate(
+            stock_in_warehouse=Coalesce(Sum('product__stock_in_warehouse'), Value(0)),
+            value_in_warehouse=Coalesce(Sum('product__value_in_warehouse'), Value(Decimal('0.00'), output_field=DecimalField())),
+            stock_arrived=Coalesce(Sum('product__stock_arrived'), Value(0)),
+            value_arrived=Coalesce(Sum('product__value_arrived'), Value(Decimal('0.00'), output_field=DecimalField())),
+            stock_in_transit=Coalesce(Sum('product__stock_in_transit'), Value(0)),
+            value_in_transit=Coalesce(Sum('product__value_in_transit'), Value(Decimal('0.00'), output_field=DecimalField()))
+        ).values('id', 'name', 'stock_in_warehouse', 'value_in_warehouse', 
+                'stock_arrived', 'value_arrived', 'stock_in_transit', 'value_in_transit')
+        
+        # 记录每个店铺的统计数据
+        for shop in shop_stats:
+            logger.info(f"店铺 {shop['name']} 统计:")
+            logger.info(f"  在库: {shop['stock_in_warehouse']} 件, {shop['value_in_warehouse']:.2f} 元")
+            logger.info(f"  到岸: {shop['stock_arrived']} 件, {shop['value_arrived']:.2f} 元")
+            logger.info(f"  在途: {shop['stock_in_transit']} 件, {shop['value_in_transit']:.2f} 元")
+        
+        # 计算总体统计
+        total_stats = Product.objects.aggregate(
+            total_in_warehouse_quantity=Coalesce(Sum('stock_in_warehouse'), Value(0)),
+            total_in_warehouse_value=Coalesce(Sum('value_in_warehouse'), Value(Decimal('0.00'), output_field=DecimalField())),
+            total_arrived_quantity=Coalesce(Sum('stock_arrived'), Value(0)),
+            total_arrived_value=Coalesce(Sum('value_arrived'), Value(Decimal('0.00'), output_field=DecimalField())),
+            total_in_transit_quantity=Coalesce(Sum('stock_in_transit'), Value(0)),
+            total_in_transit_value=Coalesce(Sum('value_in_transit'), Value(Decimal('0.00'), output_field=DecimalField()))
+        )
+        
+        logger.info(f"总体统计: {total_stats}")
+        
+        # 格式化店铺统计数据
+        formatted_shop_stats = []
+        for shop in shop_stats:
+            formatted_shop_stats.append({
+                'id': shop['id'],
+                'name': shop['name'],
+                'stats': {
+                    'stock_in_warehouse': shop['stock_in_warehouse'],
+                    'value_in_warehouse': shop['value_in_warehouse'],
+                    'stock_arrived': shop['stock_arrived'],
+                    'value_arrived': shop['value_arrived'],
+                    'stock_in_transit': shop['stock_in_transit'],
+                    'value_in_transit': shop['value_in_transit']
+                }
+            })
+        
+        context = {
+            'stats': total_stats,
+            'shop_stats': formatted_shop_stats,
+            'debug_info': {
+                'shops_count': shops_count,
+                'products_count': products_count,
+                'no_shop_products': no_shop_products,
+                'in_warehouse_count': in_warehouse_count,
+                'arrived_count': arrived_count,
+                'in_transit_count': in_transit_count,
             }
         }
-    }
-    
-    return render(request, 'erp/inventory_list.html', context)
+        
+        return render(request, 'erp/inventory/list.html', context)
+        
+    except Exception as e:
+        logger.error(f"发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        return render(request, 'erp/inventory/list.html', {'error': str(e)})
 
 
 def packing_list(request):
@@ -459,80 +325,6 @@ def delete_packing_list(request, pk):
         request, "erp/delete_packing_list.html", {"packing_list": packing_list}
     )
 
-
-def process_packing_list(df):
-    # 初始化变量
-    total_boxes = 0
-    total_weight = 0.0
-    total_volume = 0.0
-    total_side_volume = 0.0
-    total_items = 0
-    packing_type = "普货"  # 默认值
-    total_price = 0.0
-
-    try:
-        # 读取基础信息
-        total_boxes = int(df.iloc[0, 1]) if pd.notna(df.iloc[0, 1]) else 0  # B1: 总箱数
-        
-        # 读取类型 (D1)
-        type_value = df.iloc[0, 3]  # D1: 类型
-        if pd.notna(type_value):
-            if isinstance(type_value, str):
-                packing_type = type_value
-            elif isinstance(type_value, (int, float)):
-                # 如果是数字，尝试在其他位置查找类型信息
-                for i in range(5):
-                    for j in range(5):
-                        cell_value = df.iloc[i, j]
-                        if isinstance(cell_value, str) and cell_value in ["普货", "纺织", "混装"]:
-                            packing_type = cell_value
-                            break
-        
-        # 读取其他基础信息
-        total_weight = float(df.iloc[1, 1]) if pd.notna(df.iloc[1, 1]) else 0.0  # B2: 总重量
-        total_volume = float(df.iloc[2, 1]) if pd.notna(df.iloc[2, 1]) else 0.0  # B3: 总体积
-        total_side_volume = float(df.iloc[3, 1]) if pd.notna(df.iloc[3, 1]) else 0.0  # B4: 总边加一体积
-        
-        # 读取总件数 (B6)
-        # 首先尝试直接读取B6
-        total_items_value = df.iloc[5, 1]
-        if pd.notna(total_items_value):
-            if isinstance(total_items_value, (int, float)):
-                total_items = int(total_items_value)
-            else:
-                # 如果B6不是数字，尝试在周围单元格查找
-                for i in range(4, 7):  # 搜索第5-7行
-                    for j in range(1, 3):  # 搜索B-C列
-                        cell_value = df.iloc[i, j]
-                        if isinstance(cell_value, (int, float)) and cell_value > 0:
-                            total_items = int(cell_value)
-                            break
-        
-        # 读取总价格 (D2)
-        total_price = float(df.iloc[1, 3]) if pd.notna(df.iloc[1, 3]) else 0.0  # D2: 总价格
-
-        # 打印调试信息
-        print(f"总箱数 (B1): {df.iloc[0, 1]}, 实际使用: {total_boxes}, 类型: {type(df.iloc[0, 1])}")
-        print(f"类型 (D1): {type_value}, 实际使用: {packing_type}, 类型: {type(type_value)}")
-        print(f"总重量 (B2): {df.iloc[1, 1]}, 实际使用: {total_weight}, 类型: {type(df.iloc[1, 1])}")
-        print(f"总体积 (B3): {df.iloc[2, 1]}, 实际使用: {total_volume}, 类型: {type(df.iloc[2, 1])}")
-        print(f"总边加一体积 (B4): {df.iloc[3, 1]}, 实际使用: {total_side_volume}, 类型: {type(df.iloc[3, 1])}")
-        print(f"总件数 (B6): {total_items_value}, 实际使用: {total_items}, 类型: {type(total_items_value)}")
-        print(f"总价格 (D2): {df.iloc[1, 3]}, 实际使用: {total_price}, 类型: {type(df.iloc[1, 3])}")
-
-    except Exception as e:
-        print(f"读取基础信息时出错: {str(e)}")
-        # 使用默认值继续处理
-
-    return {
-        "total_boxes": total_boxes,
-        "total_weight": total_weight,
-        "total_volume": total_volume,
-        "total_side_volume": total_side_volume,
-        "total_items": total_items,
-        "packing_type": packing_type,
-        "total_price": total_price
-    }
 
 
 def handle_uploaded_file(uploaded_file):
@@ -654,11 +446,18 @@ def process_sku_data(df, packing_list):
                     product = Product(
                             sku=sku,
                             chinese_name=chinese_name,
-                            price=0.0,
-                            category=packing_list.type,
-                            weight=0.0,
-                            volume=0.0,
+                            purchase_cost=Decimal('0.00'),
+                            shipping_cost=Decimal('0.00'),
+                            weight=Decimal('0.00'),
+                            volume='0',
                             stock=0,
+                            stock_in_warehouse=0,
+                            stock_arrived=0,
+                            stock_in_transit=0,
+                            value_in_warehouse=Decimal('0.00'),
+                            value_arrived=Decimal('0.00'),
+                            value_in_transit=Decimal('0.00'),
+                            total_value=Decimal('0.00')
                     )
                 product.save()
             
@@ -734,22 +533,22 @@ def shipment_import(request):
             # 验证表单信息
             if not shop_id or not batch_number:
                 messages.error(request, '请选择店铺并填写批次号')
-                return render(request, 'erp/shipment_import.html', {
-                    'shops': Shop.objects.all()
+                return render(request, 'erp/shipment/import.html', {
+                    'shops': Shop.objects.filter(name__regex=r'^[0-9]+号店$')
                 })
             
             # 检查批次号是否已存在
             if ShipmentOrder.objects.filter(batch_number=batch_number).exists():
                 messages.error(request, f'批次号 {batch_number} 已存在')
-                return render(request, 'erp/shipment_import.html', {
-                    'shops': Shop.objects.all()
+                return render(request, 'erp/shipment/import.html', {
+                    'shops': Shop.objects.filter(name__regex=r'^[0-9]+号店$')
                 })
             
             # 验证上传的文件
             if not request.FILES.get('file'):
                 messages.error(request, '请选择要上传的Excel文件')
-                return render(request, 'erp/shipment_import.html', {
-                    'shops': Shop.objects.all()
+                return render(request, 'erp/shipment/import.html', {
+                    'shops': Shop.objects.filter(name__regex=r'^[0-9]+号店$')
                 })
             
             # 保存上传的文件
@@ -763,8 +562,8 @@ def shipment_import(request):
                 if os.path.exists(file_path):
                     os.remove(file_path)  # 删除临时文件
                 messages.error(request, f'Excel文件读取失败: {str(e)}')
-                return render(request, 'erp/shipment_import.html', {
-                    'shops': Shop.objects.all()
+                return render(request, 'erp/shipment/import.html', {
+                    'shops': Shop.objects.filter(name__regex=r'^[0-9]+号店$')
                 })
             
             # 验证必要的列是否存在
@@ -773,8 +572,8 @@ def shipment_import(request):
                 if os.path.exists(file_path):
                     os.remove(file_path)
                 messages.error(request, '文件格式不正确，请使用正确的模板')
-                return render(request, 'erp/shipment_import.html', {
-                    'shops': Shop.objects.all()
+                return render(request, 'erp/shipment/import.html', {
+                    'shops': Shop.objects.filter(name__regex=r'^[0-9]+号店$')
                 })
             
             # 创建发货单
@@ -791,81 +590,87 @@ def shipment_import(request):
             shipment_items = []
             product_cache = {}  # 缓存已获取的产品，避免重复查询
             updated_products = []  # 需要更新在途库存和货值的产品
-        
+            
+            success_count = 0
+            error_count = 0
+            
             # 处理每一行数据
             for _, row in df.iterrows():
-                sku = row['SKU']
-                quantity = int(row['数量'])
-                purchase_cost = Decimal(str(row['采购成本'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
-                volume = Decimal(str(row['体积'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
-                
-                # 从缓存中获取产品或创建
-                if sku in product_cache:
-                    product = product_cache[sku]
-                else:
+                try:
+                    sku = str(row['SKU']).strip()
+                    quantity = int(row['数量'])
+                    purchase_cost = Decimal(str(row['采购成本'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                    volume = Decimal(str(row['体积'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                    chinese_name = str(row['中文名称']).strip() if pd.notna(row.get('中文名称')) else ''
+                    
                     # 获取或创建产品
-                    product, created = Product.objects.get_or_create(
-                        sku=sku,
-                        defaults={
-                            'chinese_name': row.get('中文名称', ''),
-                            'price': purchase_cost,
-                            'volume': str(volume),
-                            'shop': shop  # 设置店铺关联
-                        }
-                    )
-                    product_cache[sku] = product
-                
-                # 更新产品的在途库存和货值
-                product.stock_in_transit = product.stock_in_transit + quantity
-                
-                # 确保使用Decimal进行计算
-                quantity_decimal = Decimal(str(quantity))
-                value_addition = purchase_cost * quantity_decimal
-                product.value_in_transit = product.value_in_transit + value_addition
-                product.value_in_transit = product.value_in_transit.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
-                
-                if product not in updated_products:
-                    updated_products.append(product)
-                
-                # 添加到批量创建列表
-                shipment_items.append(
-                    ShipmentItem(
+                    try:
+                        product = Product.objects.get(sku=sku)
+                        # 更新现有产品信息
+                        if chinese_name:
+                            product.chinese_name = chinese_name
+                        if not product.shop:
+                            product.shop = shop
+                        product.purchase_cost = purchase_cost
+                        product.volume = str(volume)
+                        product.save()
+                    except Product.DoesNotExist:
+                        product = Product.objects.create(
+                            sku=sku,
+                            chinese_name=chinese_name,
+                            purchase_cost=purchase_cost,
+                            shipping_cost=Decimal('0.00'),
+                            volume=str(volume),
+                            shop=shop,
+                            stock_in_warehouse=0,
+                            stock_arrived=0,
+                            stock_in_transit=0,
+                            stock=0,
+                            value_in_warehouse=Decimal('0.00'),
+                            value_arrived=Decimal('0.00'),
+                            value_in_transit=Decimal('0.00'),
+                            total_value=Decimal('0.00')
+                        )
+                    
+                    # 创建发货单项目
+                    shipment_item = ShipmentItem.objects.create(
                         shipment_order=shipment,
                         product=product,
                         quantity=quantity,
                         purchase_cost=purchase_cost,
-                        volume=volume
+                        volume=volume,
+                        shipping_cost=Decimal('0.00')  # 头程成本在变更状态时计算
                     )
-                )
-                
-                # 每50个创建一次，减少内存占用
-                if len(shipment_items) >= 50:
-                    ShipmentItem.objects.bulk_create(shipment_items)
-                    shipment_items = []
-            
-            # 创建剩余的项目
-            if shipment_items:
-                ShipmentItem.objects.bulk_create(shipment_items)
-            
-            # 更新产品的在途库存和货值
-            for product in updated_products:
-                product.save()
+                    
+                    # 更新产品在途库存和货值
+                    product.stock_in_transit = product.stock_in_transit + quantity
+                    product.value_in_transit = product.value_in_transit + (purchase_cost * Decimal(str(quantity)))
+                    product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
+                    product.total_value = product.value_in_warehouse + product.value_arrived + product.value_in_transit
+                    product.save()
+                    
+                    success_count += 1
+                    
+                except Exception as e:
+                    error_count += 1
+                    messages.error(request, f'处理SKU {sku} 时出错: {str(e)}')
             
             # 删除临时文件
             if os.path.exists(file_path):
                 os.remove(file_path)
             
-            messages.success(request, f'发货单 {batch_number} 导入成功')
+            if error_count > 0:
+                messages.warning(request, f'导入完成，成功: {success_count} 条，失败: {error_count} 条')
+            else:
+                messages.success(request, f'导入成功，共处理 {success_count} 条数据')
+            
             return redirect('shipment_detail', pk=shipment.id)
             
         except Exception as e:
-            # 确保临时文件被删除
-            if 'file_path' in locals() and os.path.exists(file_path):
-                os.remove(file_path)
             messages.error(request, f'导入失败: {str(e)}')
     
-    return render(request, 'erp/shipment_import.html', {
-        'shops': Shop.objects.all()
+    return render(request, 'erp/shipment/import.html', {
+        'shops': Shop.objects.filter(name__regex=r'^[0-9]+号店$')
     })
 
 
@@ -891,7 +696,7 @@ def shipment_list(request):
     except (ValueError, TypeError):
         page_obj = paginator.get_page(1)
     
-    return render(request, 'erp/shipment_list.html', {
+    return render(request, 'erp/shipment/list.html', {
         'page_obj': page_obj,
         'query': query
     })
@@ -901,7 +706,7 @@ def shipment_detail(request, pk):
     """发货单详情"""
     shipment = get_object_or_404(ShipmentOrder.objects.select_related('shop'), pk=pk)
     items = shipment.items.select_related('product').all()
-    return render(request, 'erp/shipment_detail.html', {
+    return render(request, 'erp/shipment/detail.html', {
         'shipment': shipment,
         'items': items
     })
@@ -918,7 +723,7 @@ def change_shipment_status(request, shipment_id):
             
             if total_price <= 0:
                 messages.error(request, '总价格必须大于0')
-                return render(request, 'erp/change_shipment_status.html', {'shipment': shipment})
+                return render(request, 'erp/shipment/change_status.html', {'shipment': shipment})
             
             # 更新发货单状态和总价格
             shipment.status = '到岸'
@@ -1031,17 +836,39 @@ def change_shipment_status(request, shipment_id):
         except (ValueError, TypeError) as e:
             messages.error(request, f'更新失败：{str(e)}')
     
-    return render(request, 'erp/change_shipment_status.html', {'shipment': shipment})
+    return render(request, 'erp/shipment/change_status.html', {'shipment': shipment})
 
 
 def delete_shipment(request, pk):
     """删除发货单"""
-    shipment = get_object_or_404(ShipmentOrder, pk=pk)
+    shipment = get_object_or_404(ShipmentOrder.objects.select_related('shop'), pk=pk)
+    
     if request.method == 'POST':
-        shipment.delete()
-        messages.success(request, '发货单已删除')
-        return redirect('shipment_list')
-    return render(request, 'erp/delete_shipment.html', {'shipment': shipment})
+        try:
+            # 如果发货单状态为"在途"，需要更新产品的在途库存和货值
+            if shipment.status == '在途':
+                # 使用 select_related 优化查询
+                for item in shipment.items.select_related('product').all():
+                    product = item.product
+                    # 减少在途库存
+                    product.stock_in_transit = max(0, product.stock_in_transit - item.quantity)
+                    # 减少在途货值
+                    product.value_in_transit = max(Decimal('0.00'), 
+                        product.value_in_transit - (item.purchase_cost * Decimal(str(item.quantity))))
+                    product.value_in_transit = product.value_in_transit.quantize(Decimal('0.01'))
+                    product.save()
+            
+            # 删除发货单
+            batch_number = shipment.batch_number  # 保存批次号用于消息提示
+            shipment.delete()
+            messages.success(request, f'发货单 {batch_number} 已成功删除')
+            return redirect('shipment_list')
+            
+        except Exception as e:
+            messages.error(request, f'删除发货单时出错: {str(e)}')
+            return render(request, 'erp/shipment/delete.html', {'shipment': shipment})
+    
+    return render(request, 'erp/shipment/delete.html', {'shipment': shipment})
 
 
 def inventory_edit(request, pk):
@@ -1052,7 +879,7 @@ def inventory_edit(request, pk):
         inventory.save()
         messages.success(request, "库存更新成功")
         return redirect("inventory_list")
-    return render(request, "erp/inventory_edit.html", {"inventory": inventory})
+    return render(request, "erp/inventory/edit.html", {"inventory": inventory})
 
 
 def export_shipment_detail(request, pk):
@@ -1179,7 +1006,7 @@ def rollback_shipment_status(request, shipment_id):
         except Exception as e:
             messages.error(request, f'回退失败：{str(e)}')
     
-    return render(request, 'erp/rollback_shipment_status.html', {'shipment': shipment})
+    return render(request, 'erp/shipment/rollback_status.html', {'shipment': shipment})
 
 
 def edit_shipment_item(request, shipment_id, item_id):
@@ -1244,7 +1071,7 @@ def edit_shipment_item(request, shipment_id, item_id):
         except (ValueError, TypeError) as e:
             messages.error(request, f'更新失败：{str(e)}')
     
-    return render(request, 'erp/edit_shipment_item.html', {
+    return render(request, 'erp/shipment/item/edit.html', {
         'shipment': shipment,
         'item': item
     })
@@ -1265,15 +1092,24 @@ def add_shipment_item(request, shipment_id):
             
             if not sku or quantity <= 0:
                 messages.error(request, '请输入有效的SKU和数量')
-                return render(request, 'erp/add_shipment_item.html', {'shipment': shipment})
+                return render(request, 'erp/shipment/item/add.html', {'shipment': shipment})
             
             # 获取或创建产品
             product, created = Product.objects.get_or_create(
                 sku=sku,
                 defaults={
                     'chinese_name': chinese_name,
-                    'price': purchase_cost,
-                    'volume': str(volume)
+                    'volume': str(volume),
+                    'purchase_cost': purchase_cost,
+                    'shipping_cost': Decimal('0.00'),
+                    'stock_in_warehouse': 0,
+                    'stock_arrived': 0,
+                    'stock_in_transit': 0,
+                    'stock': 0,
+                    'value_in_warehouse': Decimal('0.00'),
+                    'value_arrived': Decimal('0.00'),
+                    'value_in_transit': Decimal('0.00'),
+                    'total_value': Decimal('0.00')
                 }
             )
             
@@ -1330,7 +1166,7 @@ def add_shipment_item(request, shipment_id):
         except (ValueError, TypeError) as e:
             messages.error(request, f'添加失败：{str(e)}')
     
-    return render(request, 'erp/add_shipment_item.html', {'shipment': shipment})
+    return render(request, 'erp/shipment/item/add.html', {'shipment': shipment})
 
 
 def delete_shipment_item(request, shipment_id, item_id):
@@ -1382,7 +1218,7 @@ def delete_shipment_item(request, shipment_id, item_id):
         except Exception as e:
             messages.error(request, f'删除失败：{str(e)}')
     
-    return render(request, 'erp/delete_shipment_item.html', {
+    return render(request, 'erp/shipment/item/delete.html', {
         'shipment': shipment,
         'item': item
     })
@@ -1402,14 +1238,14 @@ def import_inventory(request):
             except Exception as e:
                 os.remove(file_path)  # 删除临时文件
                 messages.error(request, f'Excel文件读取失败: {str(e)}')
-                return render(request, 'erp/import_inventory.html')
+                return render(request, 'erp/inventory/import.html')
             
             # 检查必要的列是否存在
-            required_columns = ['SKU', '中文名称', '在库数量', '店铺']
+            required_columns = ['SKU', '中文名称', '店铺', '在库数量', '采购成本', '头程成本']
             if not all(col in df.columns for col in required_columns):
                 os.remove(file_path)
-                messages.error(request, '文件格式不正确，必须包含SKU、中文名称、在库数量和店铺列')
-                return render(request, 'erp/import_inventory.html')
+                messages.error(request, '文件格式不正确，必须包含SKU、中文名称、在库数量、店铺、采购成本和头程成本列')
+                return render(request, 'erp/inventory/import.html')
             
             # 清除现有在库数据，但保留到岸和在途数据
             preserve_query = Q(status='到岸') | Q(status='在途')
@@ -1428,6 +1264,8 @@ def import_inventory(request):
             # 处理数据
             processed_products = []
             shop_cache = {}
+            error_count = 0
+            success_count = 0
             
             for _, row in df.iterrows():
                 try:
@@ -1442,77 +1280,123 @@ def import_inventory(request):
                     shop = None
                     
                     if shop_name:
-                        if shop_name in shop_cache:
-                            shop = shop_cache[shop_name]
-                        else:
-                            shop, _ = Shop.objects.get_or_create(name=shop_name)
-                            shop_cache[shop_name] = shop
+                        # 标准化店铺名称
+                        import re
+                        match = re.match(r'^(\d+)号店.*$', shop_name)
+                        if match:
+                            standard_shop_name = f"{match.group(1)}号店"
+                            if standard_shop_name in shop_cache:
+                                shop = shop_cache[standard_shop_name]
+                            else:
+                                shop, _ = Shop.objects.get_or_create(name=standard_shop_name)
+                                shop_cache[standard_shop_name] = shop
+                    
+                    # 处理采购成本 - 确保有默认值
+                    purchase_cost = Decimal('0.00')
+                    if pd.notna(row.get('采购成本')):
+                        try:
+                            purchase_cost = Decimal(str(row['采购成本'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                        except (ValueError, TypeError, InvalidOperation):
+                            purchase_cost = Decimal('0.00')
+                    
+                    # 处理头程成本 - 确保有默认值
+                    shipping_cost = Decimal('0.00')
+                    if pd.notna(row.get('头程成本')):
+                        try:
+                            shipping_cost = Decimal(str(row['头程成本'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                        except (ValueError, TypeError, InvalidOperation):
+                            shipping_cost = Decimal('0.00')
+                    
+                    # 处理重量字段
+                    weight_value = Decimal('0.00')
+                    if pd.notna(row.get('重量')):
+                        try:
+                            weight_value = Decimal(str(row['重量'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                        except (ValueError, TypeError, InvalidOperation):
+                            weight_value = Decimal('0.00')
+                    
+                    # 处理体积字段
+                    volume_value = '0'
+                    if pd.notna(row.get('体积')):
+                        volume_value = str(row['体积'])
                     
                     # 获取或创建产品
-                    product = None
                     try:
+                        # 尝试获取现有产品
                         product = Product.objects.get(sku=sku)
+                        
+                        # 更新产品的基本信息
+                        if pd.notna(row.get('中文名称')) and row['中文名称']:
+                            product.chinese_name = str(row['中文名称'])
+                        if shop:
+                            product.shop = shop
+                        
+                        # 更新采购成本和头程成本
+                        product.purchase_cost = purchase_cost
+                        product.shipping_cost = shipping_cost
+                        product.weight = weight_value
+                        product.volume = volume_value
+                        
                     except Product.DoesNotExist:
-                        # 创建新产品
+                        # 获取必填字段的默认值
+                        chinese_name = str(row['中文名称']) if pd.notna(row['中文名称']) else ''
+                        
+                        # 创建新产品，只设置实际存在的字段
                         product = Product(
                             sku=sku,
-                            chinese_name=row['中文名称'] if pd.notna(row['中文名称']) else '',
-                            price=Decimal(str(row['价格'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP') if pd.notna(row['价格']) else Decimal('0.00'),
-                            category=row['类别'] if pd.notna(row['类别']) else '普货',
-                            weight=Decimal(str(row['重量'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP') if pd.notna(row['重量']) else Decimal('0.00'),
-                            volume=str(row['体积']) if pd.notna(row['体积']) else '',
-                            shop=shop
+                            chinese_name=chinese_name,
+                            purchase_cost=purchase_cost,
+                            shipping_cost=shipping_cost,
+                            shop=shop,
+                            weight=weight_value,
+                            volume=volume_value,
+                            stock_in_warehouse=0,
+                            stock_arrived=0,
+                            stock_in_transit=0,
+                            stock=0,
+                            value_in_warehouse=Decimal('0.00'),
+                            value_arrived=Decimal('0.00'),
+                            value_in_transit=Decimal('0.00'),
+                            total_value=Decimal('0.00')
                         )
                         product.save()
                     
                     # 更新产品在库数量和货值
-                    val = quantity
-                    product.stock_in_warehouse = product.stock_in_warehouse + int(val)
+                    product.stock_in_warehouse = product.stock_in_warehouse + quantity
                     
-                    # 计算在库货值
-                    product.value_in_warehouse = Decimal(str(row['价格'])) * product.stock_in_warehouse
+                    # 计算在库货值（采购成本 + 头程成本）× 数量
+                    product.value_in_warehouse = (purchase_cost + shipping_cost) * Decimal(str(quantity))
+                    product.value_in_warehouse = product.value_in_warehouse.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
                     
-                    # 设置店铺
-                    if shop and not product.shop:
-                        product.shop = shop
+                    # 更新总库存
+                    product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
+                    
+                    # 更新总货值
+                    product.total_value = product.value_in_warehouse + product.value_arrived + product.value_in_transit
                     
                     # 保存产品
                     product.save()
-                    
-                    # 添加到已处理列表
-                    if product not in processed_products:
-                        processed_products.append(product)
+                    success_count += 1
                     
                 except Exception as e:
-                    messages.warning(request, f'处理SKU {sku}时出错: {str(e)}')
-            
-            # 更新所有处理过的产品的总库存和总货值
-            for product in processed_products:
-                # 重新计算总库存
-                product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
-                
-                # 重新计算总货值，确保使用Decimal
-                warehouse_value = Decimal(str(product.value_in_warehouse))
-                arrived_value = Decimal(str(product.value_arrived))
-                transit_value = Decimal(str(product.value_in_transit))
-                
-                product.total_value = warehouse_value + arrived_value + transit_value
-                product.save()
+                    error_count += 1
+                    messages.error(request, f'处理SKU {sku} 时出错: {str(e)}')
             
             # 删除临时文件
             if os.path.exists(file_path):
                 os.remove(file_path)
             
-            messages.success(request, f'成功导入 {len(processed_products)} 个产品的在库数据')
+            if error_count > 0:
+                messages.warning(request, f'导入完成，成功: {success_count} 条，失败: {error_count} 条')
+            else:
+                messages.success(request, f'导入成功，共处理 {success_count} 条数据')
+            
             return redirect('inventory_list')
             
         except Exception as e:
-            # 确保临时文件被删除
-            if 'file_path' in locals() and os.path.exists(file_path):
-                os.remove(file_path)
             messages.error(request, f'导入失败: {str(e)}')
     
-    return render(request, 'erp/import_inventory.html')
+    return render(request, 'erp/inventory/import.html')
 
 
 def download_inventory_template(request):
@@ -1522,7 +1406,7 @@ def download_inventory_template(request):
         'SKU': ['ABC123', 'ABC123', 'DEF456', 'GHI789', 'JKL012'],
         '中文名称': ['产品A', '产品A', '产品B', '产品C', '产品D'],
         '店铺': ['1号店', '9号店', '9号店', '12号店', '16号店'],
-        '数量': [10, 5, 20, 30, 15],
+        '在库数量': [10, 5, 20, 30, 15],
         '采购成本': [100.00, 100.00, 200.00, 300.00, 150.00],
         '头程成本': [20.00, 20.00, 30.00, 40.00, 25.00]
     }
@@ -1607,8 +1491,6 @@ def export_inventory(request):
         data.append({
             'SKU': product.sku,
             '中文名称': product.chinese_name,
-            '价格': product.price,
-            '类别': product.category,
             '重量': product.weight,
             '体积': product.volume,
             '店铺': product.shop.name if product.shop else '',
@@ -1616,6 +1498,7 @@ def export_inventory(request):
             '到岸数量': product.stock_arrived,
             '在途数量': product.stock_in_transit,
             '总库存': product.stock,
+            '采购成本': product.purchase_cost,
             '头程成本': product.shipping_cost,
             '在库货值': product.value_in_warehouse,
             '到岸货值': product.value_arrived,
@@ -1632,5 +1515,98 @@ def export_inventory(request):
     
     # 导出Excel
     df.to_excel(response, index=False)
+    
+    return response
+
+
+def export_inventory_stats(request):
+    """导出库存统计表"""
+    from django.db.models import Sum, Value, F, DecimalField
+    from django.db.models.functions import Coalesce
+    from decimal import Decimal
+    
+    # 创建响应对象
+    response = HttpResponse(content_type='text/csv')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    response['Content-Disposition'] = f'attachment; filename="库存统计表_{timestamp}.csv"'
+    
+    # 设置CSV写入器，指定UTF-8编码并添加BOM头
+    response.write(u'\ufeff'.encode('utf-8'))
+    writer = csv.writer(response)
+    
+    # 写入表头
+    writer.writerow([
+        '店铺',
+        '在库数量',
+        '在库货值',
+        '到岸数量',
+        '到岸货值',
+        '在途数量',
+        '在途货值',
+        '总数量',
+        '总货值'
+    ])
+    
+    # 获取所有店铺的统计数据
+    shops = Shop.objects.filter(name__regex=r'^[0-9]+号店$').annotate(
+        stock_in_warehouse=Coalesce(Sum('product__stock_in_warehouse'), Value(0)),
+        value_in_warehouse=Coalesce(Sum('product__value_in_warehouse'), Value(Decimal('0.00'), output_field=DecimalField())),
+        stock_arrived=Coalesce(Sum('product__stock_arrived'), Value(0)),
+        value_arrived=Coalesce(Sum('product__value_arrived'), Value(Decimal('0.00'), output_field=DecimalField())),
+        stock_in_transit=Coalesce(Sum('product__stock_in_transit'), Value(0)),
+        value_in_transit=Coalesce(Sum('product__value_in_transit'), Value(Decimal('0.00'), output_field=DecimalField()))
+    )
+    
+    # 初始化总计
+    total_stats = {
+        'warehouse_qty': 0,
+        'warehouse_value': Decimal('0.00'),
+        'arrived_qty': 0,
+        'arrived_value': Decimal('0.00'),
+        'transit_qty': 0,
+        'transit_value': Decimal('0.00')
+    }
+    
+    # 写入每个店铺的数据
+    for shop in shops:
+        # 计算店铺总数和总值
+        total_qty = shop.stock_in_warehouse + shop.stock_arrived + shop.stock_in_transit
+        total_value = shop.value_in_warehouse + shop.value_arrived + shop.value_in_transit
+        
+        writer.writerow([
+            shop.name,
+            shop.stock_in_warehouse,
+            f"¥ {shop.value_in_warehouse:.2f}",
+            shop.stock_arrived,
+            f"¥ {shop.value_arrived:.2f}",
+            shop.stock_in_transit,
+            f"¥ {shop.value_in_transit:.2f}",
+            total_qty,
+            f"¥ {total_value:.2f}"
+        ])
+        
+        # 累加到总计
+        total_stats['warehouse_qty'] += shop.stock_in_warehouse
+        total_stats['warehouse_value'] += shop.value_in_warehouse
+        total_stats['arrived_qty'] += shop.stock_arrived
+        total_stats['arrived_value'] += shop.value_arrived
+        total_stats['transit_qty'] += shop.stock_in_transit
+        total_stats['transit_value'] += shop.value_in_transit
+    
+    # 写入合计行
+    total_qty = total_stats['warehouse_qty'] + total_stats['arrived_qty'] + total_stats['transit_qty']
+    total_value = total_stats['warehouse_value'] + total_stats['arrived_value'] + total_stats['transit_value']
+    
+    writer.writerow([
+        '合计',
+        total_stats['warehouse_qty'],
+        f"¥ {total_stats['warehouse_value']:.2f}",
+        total_stats['arrived_qty'],
+        f"¥ {total_stats['arrived_value']:.2f}",
+        total_stats['transit_qty'],
+        f"¥ {total_stats['transit_value']:.2f}",
+        total_qty,
+        f"¥ {total_value:.2f}"
+    ])
     
     return response

@@ -26,7 +26,12 @@ SECRET_KEY = "django-insecure-pkwdpsacj5js43_yl67uh*wp5^5b7e&2*$-o0h^oxw&6(7-@7+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']  # 允许所有主机访问，生产环境中应该设置具体的IP地址
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '192.168.110.13',  # 添加你的局域网IP
+    '*',  # 允许所有主机（仅在开发环境中使用）
+]
 
 
 # Application definition
@@ -132,3 +137,41 @@ STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesSto
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# 日志配置
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': 'django.log',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        '': {  # 根记录器
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+        },
+        'erp': {  # erp应用的记录器
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

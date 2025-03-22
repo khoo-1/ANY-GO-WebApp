@@ -20,16 +20,13 @@ urlpatterns = [
     path('inventory/export/', views.export_inventory, name='export_inventory'),
     path('inventory/template/', views.download_inventory_template, name='download_inventory_template'),
     path('inventory/<int:pk>/edit/', views.inventory_edit, name='inventory_edit'),
+    path('inventory/export-stats/', views.export_inventory_stats, name='export_inventory_stats'),
     
     # 装箱单管理
-    path('packing-list/', views.packing_list, name='packing_list'),
-    path('packing-list/<int:pk>/', views.packing_list_detail, name='packing_list_detail'),
-    path('packing-list/<int:pk>/delete/', views.delete_packing_list, name='delete_packing_list'),
+
     
     # 批量上传
-    path('bulk-upload/', views.bulk_upload, name='bulk_upload'),
-    path('bulk-product-upload/', views.bulk_product_upload, name='bulk_product_upload'),
-    path('save-bulk-upload/', views.save_bulk_upload, name='save_bulk_upload'),
+    
     
     # 发货单管理
     path('shipment/', views.shipment_list, name='shipment_list'),
@@ -47,5 +44,5 @@ urlpatterns = [
     path('shipment/<int:shipment_id>/item/<int:item_id>/delete/', views.delete_shipment_item, name='delete_shipment_item'),
     
     # 数据管理
-    path('clear-data/', views.clear_all_data, name='clear_all_data'),
+    path('clear-data/', views.clear_data, name='clear_data'),
 ]

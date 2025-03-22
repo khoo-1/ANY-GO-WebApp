@@ -11,6 +11,9 @@ class DjangoService(win32serviceutil.ServiceFramework):
     _svc_name_ = 'DjangoWebApp'
     _svc_display_name_ = 'Django Web Application Service'
     _svc_description_ = 'Runs Django web application as a Windows service'
+    _svc_deps_ = ['EventLog']
+    _exe_name_ = sys.executable
+    _exe_args_ = '"' + os.path.abspath(__file__) + '"'
 
     def __init__(self, args):
         win32serviceutil.ServiceFramework.__init__(self, args)
@@ -26,10 +29,20 @@ class DjangoService(win32serviceutil.ServiceFramework):
     def SvcDoRun(self):
         try:
             os.chdir(os.path.dirname(os.path.abspath(__file__)))
+            python_path = sys.executable
+            env = os.environ.copy()
+            env['PYTHONPATH'] = os.path.dirname(os.path.abspath(__file__))
             self.process = subprocess.Popen(
-                ['python', 'manage.py', 'runserver', '0.0.0.0:8000'],
+                [python_path, 'manage.py', 'runserver', '0.0.0.0:8000'],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
+                env=env,
+                cwd=os.path.dirname(os.path.abspath(__file__))
+            )
+            servicemanager.LogMsg(
+                servicemanager.EVENTLOG_INFORMATION_TYPE,
+                servicemanager.PYS_SERVICE_STARTED,
+                (self._svc_name_, '')
             )
             self.process.wait()
         except Exception as e:
