@@ -7,12 +7,12 @@ urlpatterns = [
     path('', views.index, name='index'),
     
     # 产品管理
-    path('products/', views.product_list, name='product_list'),
-    path('products/export/', views.export_products, name='export_products'),
-    path('products/<int:pk>/', views.product_detail, name='product_detail'),
-    path('products/add/', views.add_product, name='add_product'),
-    path('products/<int:pk>/edit/', views.edit_product, name='edit_product'),
-    path('products/<int:pk>/delete/', views.delete_product, name='delete_product'),
+    path('product/', views.product_list, name='product_list'),
+    path('product/export/', views.export_products, name='export_products'),
+    path('product/<int:pk>/', views.product_detail, name='product_detail'),
+    path('product/add/', views.add_product, name='add_product'),
+    path('product/<int:pk>/edit/', views.edit_product, name='edit_product'),
+    path('product/<int:pk>/delete/', views.delete_product, name='delete_product'),
     
     # 库存管理
     path('inventory/', views.inventory_list, name='inventory_list'),

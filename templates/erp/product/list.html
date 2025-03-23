@@ -3,123 +3,322 @@
 
 {% block title %}产品列表{% endblock %}
 
+{% block extra_css %}
+<style>
+.table-wrapper {
+    position: relative;
+    height: calc(100vh - 130px);
+    margin: 0;
+}
+
+.table-scroll {
+    overflow: auto;
+    height: 100%;
+    scrollbar-width: thin;
+}
+
+.table-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.table-scroll::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8f9fa;
+}
+
+.sticky-header th {
+    position: sticky;
+    top: 0;
+    background: #f8f9fa;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.table td, .table th {
+    white-space: nowrap;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+.btn-group-xs > .btn, .btn-xs {
+    padding: 0.1rem 0.3rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    border-radius: 0.15rem;
+}
+
+.operation-column {
+    position: sticky;
+    right: 0;
+    background: #fff;
+    box-shadow: -2px 0 3px rgba(0,0,0,0.1);
+    z-index: 1;
+}
+
+.checkbox-column {
+    position: sticky;
+    left: 0;
+    background: #fff;
+    box-shadow: 2px 0 3px rgba(0,0,0,0.1);
+    z-index: 1;
+}
+
+.form-container {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #fff;
+    padding: 0.5rem 0;
+    margin: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.money-column {
+    min-width: 100px;
+}
+
+.number-column {
+    min-width: 80px;
+}
+
+.name-column {
+    min-width: 140px;
+}
+
+.shop-column {
+    min-width: 80px;
+}
+
+.table > :not(caption) > * > * {
+    padding: 0.25rem 0.5rem;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0,0,0,.02);
+}
+
+.text-end {
+    text-align: right;
+}
+
+.form-control-xs {
+    height: calc(1.5em + 0.5rem + 2px);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-radius: 0.2rem;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">产品列表</h5>
+<div class="container-fluid g-0">
+    <div class="form-container">
+        <div class="d-flex justify-content-between align-items-center px-2 mb-2">
+            <h2 class="h5 mb-0">产品列表</h2>
             <div>
-                <a href="{% url 'export_products' %}" class="btn btn-success">导出为 Excel</a>
-                <a href="{% url 'add_product' %}" class="btn btn-primary">添加产品</a>
+                <button class="btn btn-success btn-xs me-1" onclick="exportToExcel()">导出为Excel</button>
+                <a href="{% url 'add_product' %}" class="btn btn-primary btn-xs">添加产品</a>
             </div>
         </div>
-        
-        <div class="card-body">
-            <form method="get" action="{% url 'product_list' %}" class="mb-4">
-                <div class="input-group">
-                    <input type="text" name="q" class="form-control" placeholder="搜索产品..." value="{{ request.GET.q }}">
-                    <div class="input-group-append">
-                        <button type="submit" class="btn btn-outline-secondary">搜索</button>
+
+        <div class="px-2">
+            <form method="get" class="row g-1 align-items-center">
+                <div class="col-auto flex-grow-1">
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control form-control-xs" id="search" name="q" value="{{ request.GET.q }}" placeholder="输入SKU或中文名称">
+                        <select class="form-select form-select-sm w-auto" id="shop" name="shop">
+                            <option value="">全部店铺</option>
+                            {% for shop in shops %}
+                            <option value="{{ shop.id }}" {% if shop.id|stringformat:"i" == current_shop|stringformat:"i" %}selected{% endif %}>
+                                {{ shop.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm">搜索</button>
                     </div>
                 </div>
             </form>
+        </div>
+    </div>
 
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>SKU</th>
-                            <th>中文名称</th>
-                            <th>采购成本</th>
-                            <th>重量</th>
-                            <th>体积</th>
-                            <th>库存</th>
-                            <th>运输成本</th>
-                            <th>总价值</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for product in page_obj %}
-                        <tr>
-                            <td>{{ product.sku }}</td>
-                            <td>{{ product.chinese_name }}</td>
-                            <td>{{ product.purchase_cost }}</td>
-                            <td>{{ product.weight }}</td>
-                            <td>{{ product.volume }}</td>
-                            <td>{{ product.stock }}</td>
-                            <td>{{ product.shipping_cost }}</td>
-                            <td>{{ product.total_value }}</td>
-                            <td>
-                                <div class="btn-group">
-                                    <a href="{% url 'edit_product' product.pk %}" class="btn btn-sm btn-info">编辑</a>
-                                    <a href="{% url 'delete_product' product.pk %}" class="btn btn-sm btn-danger">删除</a>
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="10" class="text-center">没有找到产品记录</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            {% if page_obj.has_other_pages %}
-            <nav aria-label="Page navigation" class="mt-4">
-                <ul class="pagination justify-content-center">
-                    {% if page_obj.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page=1{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}" aria-label="First">
-                            <span aria-hidden="true">&laquo;&laquo;</span>
-                        </a>
-                    </li>
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}" aria-label="Previous">
-                            <span aria-hidden="true">&laquo;</span>
-                        </a>
-                    </li>
-                    {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">&laquo;&laquo;</span>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">&laquo;</span>
-                    </li>
-                    {% endif %}
-                    
-                    {% for i in page_obj.paginator.page_range %}
-                        {% if page_obj.number == i %}
-                        <li class="page-item active"><span class="page-link">{{ i }}</span></li>
-                        {% elif i > page_obj.number|add:'-3' and i < page_obj.number|add:'3' %}
-                        <li class="page-item"><a class="page-link" href="?page={{ i }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">{{ i }}</a></li>
-                        {% endif %}
+    <div class="table-wrapper">
+        <div class="table-scroll">
+            <table class="table table-hover table-sm align-middle mb-0">
+                <thead class="sticky-header">
+                    <tr>
+                        <th class="checkbox-column text-center" style="width: 2rem;">
+                            <input type="checkbox" id="selectAll" class="form-check-input">
+                        </th>
+                        <th class="name-column">SKU</th>
+                        <th class="name-column">中文名称</th>
+                        <th class="text-end money-column">采购成本</th>
+                        <th class="text-end money-column">头程成本</th>
+                        <th class="text-end number-column">重量(kg)</th>
+                        <th class="text-end number-column">体积(m³)</th>
+                        <th class="shop-column">店铺</th>
+                        <th class="text-end number-column">在库数量</th>
+                        <th class="text-end money-column">在库货值</th>
+                        <th class="text-end number-column">到岸数量</th>
+                        <th class="text-end money-column">到岸货值</th>
+                        <th class="text-end number-column">在途数量</th>
+                        <th class="text-end money-column">在途货值</th>
+                        <th class="text-end number-column">总库存</th>
+                        <th class="text-end money-column">总货值</th>
+                        <th class="operation-column text-center" style="width: 4.5rem;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in page_obj %}
+                    <tr>
+                        <td class="checkbox-column text-center">
+                            <input type="checkbox" class="form-check-input product-select" value="{{ product.id }}">
+                        </td>
+                        <td>{{ product.sku }}</td>
+                        <td>{{ product.chinese_name }}</td>
+                        <td class="text-end">¥{{ product.purchase_cost|floatformat:2 }}</td>
+                        <td class="text-end">¥{{ product.shipping_cost|floatformat:2 }}</td>
+                        <td class="text-end">{{ product.weight|floatformat:2 }}</td>
+                        <td class="text-end">{{ product.volume|floatformat:3 }}</td>
+                        <td>{{ product.shop.name|default:'-' }}</td>
+                        <td class="text-end">{{ product.stock_in_warehouse }}</td>
+                        <td class="text-end">¥{{ product.value_in_warehouse|floatformat:2 }}</td>
+                        <td class="text-end">{{ product.stock_arrived }}</td>
+                        <td class="text-end">¥{{ product.value_arrived|floatformat:2 }}</td>
+                        <td class="text-end">{{ product.stock_in_transit }}</td>
+                        <td class="text-end">¥{{ product.value_in_transit|floatformat:2 }}</td>
+                        <td class="text-end">{{ product.stock }}</td>
+                        <td class="text-end">¥{{ product.total_value|floatformat:2 }}</td>
+                        <td class="operation-column text-center px-1">
+                            <div class="btn-group btn-group-xs">
+                                <a href="{% url 'product_detail' product.id %}" class="btn btn-info">查</a>
+                                <a href="{% url 'edit_product' product.id %}" class="btn btn-primary">编</a>
+                                <button type="button" class="btn btn-danger" onclick="deleteProduct({{ product.id }})">删</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="17" class="text-center">暂无产品数据</td>
+                    </tr>
                     {% endfor %}
-                    
-                    {% if page_obj.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}" aria-label="Next">
-                            <span aria-hidden="true">&raquo;</span>
-                        </a>
-                    </li>
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}" aria-label="Last">
-                            <span aria-hidden="true">&raquo;&raquo;</span>
-                        </a>
-                    </li>
-                    {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">&raquo;</span>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">&raquo;&raquo;</span>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="px-2 py-2 bg-white border-top">
+        <ul class="pagination pagination-sm justify-content-center mb-0">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link py-0" href="?page=1{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.shop %}&shop={{ request.GET.shop }}{% endif %}">&laquo;</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link py-0" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.shop %}&shop={{ request.GET.shop }}{% endif %}">上一页</a>
+            </li>
             {% endif %}
+
+            {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active">
+                <span class="page-link py-0">{{ num }}</span>
+            </li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link py-0" href="?page={{ num }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.shop %}&shop={{ request.GET.shop }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link py-0" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.shop %}&shop={{ request.GET.shop }}{% endif %}">下一页</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link py-0" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.shop %}&shop={{ request.GET.shop }}{% endif %}">&raquo;</a>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="mb-0">确定要删除这个产品吗？此操作不可恢复。</p>
+            </div>
+            <div class="modal-footer py-1">
+                <button type="button" class="btn btn-secondary btn-xs" data-bs-dismiss="modal">取消</button>
+                <form id="deleteForm" method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-xs">确认删除</button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 全选功能
+    const selectAll = document.getElementById('selectAll');
+    const productCheckboxes = document.querySelectorAll('.product-select');
+
+    selectAll.addEventListener('change', function() {
+        productCheckboxes.forEach(checkbox => {
+            checkbox.checked = selectAll.checked;
+        });
+    });
+
+    productCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            selectAll.checked = [...productCheckboxes].every(cb => cb.checked);
+        });
+    });
+});
+
+// 删除产品
+function deleteProduct(productId) {
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    const deleteForm = document.getElementById('deleteForm');
+    deleteForm.action = `/erp/product/${productId}/delete/`;
+    modal.show();
+}
+
+// 导出Excel
+function exportToExcel() {
+    const urlParams = new URLSearchParams(window.location.search);
+    let exportUrl = '{% url "export_products" %}';
+    
+    if (urlParams.has('q')) {
+        exportUrl += `?q=${urlParams.get('q')}`;
+    }
+    if (urlParams.has('shop')) {
+        exportUrl += `${urlParams.has('q') ? '&' : '?'}shop=${urlParams.get('shop')}`;
+    }
+    
+    window.location.href = exportUrl;
+}
+</script>
 {% endblock %}
