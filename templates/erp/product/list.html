@@ -204,7 +204,7 @@
                             <div class="btn-group btn-group-xs">
                                 <a href="{% url 'product_detail' product.id %}" class="btn btn-info">查</a>
                                 <a href="{% url 'edit_product' product.id %}" class="btn btn-primary">编</a>
-                                <button type="button" class="btn btn-danger" onclick="deleteProduct({{ product.id }})">删</button>
+                                <button type="button" class="btn btn-danger" onclick="deleteProduct('{{ product.id }}')">删</button>
                             </div>
                         </td>
                     </tr>
