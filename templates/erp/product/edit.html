@@ -3,44 +3,156 @@
 {% block title %}编辑产品{% endblock %}
 
 {% block content %}
-<h2>编辑产品</h2>
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    <table>
-        <tr>
-            <th>SKU:</th>
-            <td>{{ form.sku }}</td>
-        </tr>
-        <tr>
-            <th>中文名称:</th>
-            <td>{{ form.chinese_name }}</td>
-        </tr>
-        <tr>
-            <th>采购成本:</th>
-            <td>{{ form.purchase_cost }}</td>
-        </tr>
-        <tr>
-            <th>重量:</th>
-            <td>{{ form.weight }}</td>
-        </tr>
-        <tr>
-            <th>体积:</th>
-            <td>{{ form.volume }}</td>
-        </tr>
-        <tr>
-            <th>库存:</th>
-            <td>{{ form.stock }}</td>
-        </tr>
-        <tr>
-            <th>头程成本:</th>
-            <td>{{ form.shipping_cost }}</td>
-        </tr>
-        <tr>
-            <th>总货值:</th>
-            <td>{{ form.total_value }}</td>
-        </tr>
-    </table>
-    <button type="submit" class="btn btn-primary">保存</button>
-    <a href="{% url 'product_list' %}" class="btn btn-secondary">返回</a>
-</form>
+<div class="container mt-4">
+    <h2 class="mb-4">编辑产品</h2>
+    
+    {% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <form method="post" class="needs-validation" novalidate>
+        {% csrf_token %}
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">基本信息</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="{{ form.sku.id_for_label }}" class="form-label">SKU</label>
+                            {{ form.sku }}
+                            {% if form.sku.errors %}
+                            <div class="invalid-feedback">{{ form.sku.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.chinese_name.id_for_label }}" class="form-label">中文名称</label>
+                            {{ form.chinese_name }}
+                            {% if form.chinese_name.errors %}
+                            <div class="invalid-feedback">{{ form.chinese_name.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.shop.id_for_label }}" class="form-label">店铺</label>
+                            {{ form.shop }}
+                            {% if form.shop.errors %}
+                            <div class="invalid-feedback">{{ form.shop.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.purchase_cost.id_for_label }}" class="form-label">采购成本</label>
+                            {{ form.purchase_cost }}
+                            {% if form.purchase_cost.errors %}
+                            <div class="invalid-feedback">{{ form.purchase_cost.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.shipping_cost.id_for_label }}" class="form-label">头程成本</label>
+                            {{ form.shipping_cost }}
+                            {% if form.shipping_cost.errors %}
+                            <div class="invalid-feedback">{{ form.shipping_cost.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.weight.id_for_label }}" class="form-label">重量(kg)</label>
+                            {{ form.weight }}
+                            {% if form.weight.errors %}
+                            <div class="invalid-feedback">{{ form.weight.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.volume.id_for_label }}" class="form-label">体积(m³)</label>
+                            {{ form.volume }}
+                            {% if form.volume.errors %}
+                            <div class="invalid-feedback">{{ form.volume.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">库存信息</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="{{ form.stock_in_warehouse.id_for_label }}" class="form-label">在库数量</label>
+                            {{ form.stock_in_warehouse }}
+                            {% if form.stock_in_warehouse.errors %}
+                            <div class="invalid-feedback">{{ form.stock_in_warehouse.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.value_in_warehouse.id_for_label }}" class="form-label">在库货值</label>
+                            {{ form.value_in_warehouse }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.stock_arrived.id_for_label }}" class="form-label">到岸数量</label>
+                            {{ form.stock_arrived }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.value_arrived.id_for_label }}" class="form-label">到岸货值</label>
+                            {{ form.value_arrived }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.stock_in_transit.id_for_label }}" class="form-label">在途数量</label>
+                            {{ form.stock_in_transit }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.value_in_transit.id_for_label }}" class="form-label">在途货值</label>
+                            {{ form.value_in_transit }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.stock.id_for_label }}" class="form-label">总库存</label>
+                            {{ form.stock }}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.total_value.id_for_label }}" class="form-label">总货值</label>
+                            {{ form.total_value }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <a href="{% url 'product_list' %}" class="btn btn-secondary">返回</a>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<style>
+.form-control[readonly] {
+    background-color: #e9ecef;
+    cursor: not-allowed;
+}
+</style>
+
 {% endblock %}

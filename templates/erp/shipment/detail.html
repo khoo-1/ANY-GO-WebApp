@@ -1,21 +1,33 @@
 {% extends "erp/base.html" %}
 {% load erp_filters %}
 
+{% block title %}发货单详情{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>发货单详情</h2>
         <div>
-            <a href="{% url 'export_shipment_detail' shipment.pk %}" class="btn btn-success me-2">导出Excel</a>
+            <a href="{% url 'export_shipment_detail' pk=shipment.id %}" class="btn btn-success">导出Excel</a>
             {% if shipment.status == '在途' %}
-                <a href="{% url 'change_shipment_status' shipment.id %}" class="btn btn-warning me-2">变更为到岸</a>
+            <a href="{% url 'change_shipment_status' shipment_id=shipment.id %}" class="btn btn-primary">变更到岸</a>
             {% elif shipment.status == '到岸' %}
-                <a href="{% url 'rollback_shipment_status' shipment.id %}" class="btn btn-danger me-2">回退到在途</a>
+            <a href="{% url 'rollback_shipment_status' shipment_id=shipment.id %}" class="btn btn-warning">回退到在途</a>
             {% endif %}
             <a href="{% url 'shipment_list' %}" class="btn btn-secondary">返回列表</a>
         </div>
     </div>
-    
+
+    {% if messages %}
+    <div class="messages mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <div class="card mb-4">
         <div class="card-header">
             <h5 class="card-title mb-0">基本信息</h5>
@@ -39,35 +51,36 @@
                     <p><strong>创建时间：</strong>{{ shipment.created_at|date:"Y-m-d H:i" }}</p>
                 </div>
             </div>
-            <div class="row mt-3">
-                <div class="col-md-6">
-                    <p><strong>总价格：</strong>{{ shipment.total_price }}</p>
-                </div>
-                <div class="col-md-6">
-                    <p><strong>总货值：</strong>{{ shipment.calculate_total_value }}</p>
+            {% if shipment.status == '到岸' and shipment.total_price %}
+            <div class="row mt-2">
+                <div class="col-md-12">
+                    <p><strong>总价格：</strong>¥{{ shipment.total_price }}</p>
                 </div>
             </div>
+            {% endif %}
         </div>
     </div>
-    
+
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="card-title mb-0">商品明细</h5>
-            <a href="{% url 'add_shipment_item' shipment_id=shipment.id %}" class="btn btn-sm btn-primary">添加商品</a>
+            <a href="{% url 'add_shipment_item' shipment_id=shipment.id %}" class="btn btn-primary btn-sm">添加商品</a>
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-striped">
+                <table class="table table-striped table-hover">
                     <thead>
                         <tr>
                             <th>SKU</th>
                             <th>中文名称</th>
-                            <th>数量</th>
-                            <th>采购成本</th>
-                            <th>体积</th>
-                            <th>头程成本</th>
-                            <th>货值</th>
-                            <th>操作</th>
+                            <th class="text-end">数量</th>
+                            <th class="text-end">采购成本</th>
+                            <th class="text-end">体积</th>
+                            {% if shipment.status == '到岸' %}
+                            <th class="text-end">头程成本</th>
+                            {% endif %}
+                            <th class="text-end">货值</th>
+                            <th class="text-center">操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -75,33 +88,63 @@
                         <tr>
                             <td>{{ item.product.sku }}</td>
                             <td>{{ item.product.chinese_name }}</td>
-                            <td>{{ item.quantity }}</td>
-                            <td>{{ item.purchase_cost }}</td>
-                            <td>{{ item.volume }}</td>
-                            <td>{{ item.shipping_cost }}</td>
-                            <td>
-                                {% if shipment.status == '在途' %}
-                                    {{ item.purchase_cost|multiply:item.quantity }}
+                            <td class="text-end">{{ item.quantity }}</td>
+                            <td class="text-end">{{ item.purchase_cost }}</td>
+                            <td class="text-end">{{ item.volume }}</td>
+                            {% if shipment.status == '到岸' %}
+                            <td class="text-end">{{ item.shipping_cost }}</td>
+                            {% endif %}
+                            <td class="text-end">
+                                {% if shipment.status == '到岸' %}
+                                    {% with total_cost=item.purchase_cost|add:item.shipping_cost %}
+                                    {{ total_cost|multiply:item.quantity|floatformat:2 }}
+                                    {% endwith %}
                                 {% else %}
-                                    {{ item.purchase_cost|add:item.shipping_cost|multiply:item.quantity }}
+                                    {{ item.purchase_cost|multiply:item.quantity|floatformat:2 }}
                                 {% endif %}
                             </td>
-                            <td>
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <a href="{% url 'edit_shipment_item' shipment_id=shipment.id item_id=item.id %}" class="btn btn-primary">编辑</a>
-                                    <a href="{% url 'delete_shipment_item' shipment_id=shipment.id item_id=item.id %}" class="btn btn-danger">删除</a>
-                                </div>
+                            <td class="text-center">
+                                <a href="{% url 'edit_shipment_item' shipment_id=shipment.id item_id=item.id %}" class="btn btn-sm btn-primary">编辑</a>
+                                <a href="{% url 'delete_shipment_item' shipment_id=shipment.id item_id=item.id %}" class="btn btn-sm btn-danger">删除</a>
                             </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="8" class="text-center">暂无商品数据</td>
                         </tr>
                         {% endfor %}
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="2" class="text-end"><strong>合计：</strong></td>
+                            <td class="text-end"><strong>{{ items|sum_quantity }}</strong></td>
+                            <td></td>
+                            <td class="text-end"><strong>{{ items|sum_volume|floatformat:2 }}</strong></td>
+                            {% if shipment.status == '到岸' %}
+                            <td></td>
+                            {% endif %}
+                            <td class="text-end">
+                                <strong>
+                                {% if shipment.status == '到岸' %}
+                                    {{ items|sum_total_value_with_shipping|floatformat:2 }}
+                                {% else %}
+                                    {{ items|sum_total_value|floatformat:2 }}
+                                {% endif %}
+                                </strong>
+                            </td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 添加自定义过滤器
+django.jQuery.extend(django.jQuery.fn.django.filters, {
+    multiply: function(value1, value2) {
+        return parseFloat(value1) * parseFloat(value2);
+    }
+});
+</script>
 {% endblock %} 

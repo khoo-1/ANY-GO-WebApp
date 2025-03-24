@@ -154,23 +154,59 @@ def clear_data(request):
 
 
 def edit_product(request, pk):
-    # 获取要编辑的产品对象，如果不存在则返回404错误
+    """编辑产品"""
     product = get_object_or_404(Product, pk=pk)
     
     if request.method == "POST":
-        # 如果请求方法是POST，表示表单已提交
-        form = ProductForm(request.POST, request.FILES, instance=product)
+        form = ProductForm(request.POST, instance=product)
         if form.is_valid():
-            # 如果表单数据有效，保存表单数据
-            form.save()
-            # 保存成功后重定向到产品列表页面
-            return redirect("product_list")
+            try:
+                # 获取原始数据，用于比较变化
+                old_stock_in_warehouse = product.stock_in_warehouse
+                old_purchase_cost = product.purchase_cost
+                old_shipping_cost = product.shipping_cost
+                
+                # 保存基本字段
+                product = form.save(commit=False)
+                
+                # 如果在库数量、采购成本或头程成本发生变化，重新计算在库货值
+                if (old_stock_in_warehouse != product.stock_in_warehouse or 
+                    old_purchase_cost != product.purchase_cost or 
+                    old_shipping_cost != product.shipping_cost):
+                    product.value_in_warehouse = (
+                        (product.purchase_cost + product.shipping_cost) * 
+                        Decimal(str(product.stock_in_warehouse))
+                    ).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                
+                # 更新总库存
+                product.stock = (
+                    product.stock_in_warehouse + 
+                    product.stock_arrived + 
+                    product.stock_in_transit
+                )
+                
+                # 更新总货值
+                product.total_value = (
+                    product.value_in_warehouse + 
+                    product.value_arrived + 
+                    product.value_in_transit
+                ).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                
+                # 保存更新后的产品
+                product.save()
+                
+                messages.success(request, '产品更新成功')
+                return redirect('product_list')
+                
+            except Exception as e:
+                messages.error(request, f'保存失败：{str(e)}')
     else:
-        # 如果请求方法不是POST，表示是GET请求，显示表单
         form = ProductForm(instance=product)
     
-    # 渲染编辑产品页面，并传递表单对象
-    return render(request, "erp/product/edit.html", {"form": form})
+    return render(request, 'erp/product/edit.html', {
+        'form': form,
+        'product': product
+    })
 
 
 def delete_product(request, pk):
@@ -809,6 +845,14 @@ def change_shipment_status(request, shipment_id):
                             product.value_arrived = product.value_arrived + arrived_value_addition
                             product.value_arrived = product.value_arrived.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
                             
+                            # 更新总库存和总货值
+                            product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
+                            product.total_value = (
+                                product.value_in_warehouse + 
+                                product.value_arrived + 
+                                product.value_in_transit
+                            ).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                            
                             if product not in updated_products:
                                 updated_products.append(product)
                                 
@@ -839,55 +883,58 @@ def change_shipment_status(request, shipment_id):
     return render(request, 'erp/shipment/change_status.html', {'shipment': shipment})
 
 
-def delete_shipment(request, pk):
-    """删除发货单"""
-    shipment = get_object_or_404(ShipmentOrder.objects.select_related('shop'), pk=pk)
-    
-    if request.method == 'POST':
-        try:
-            # 使用 select_related 优化查询
-            items = shipment.items.select_related('product').all()
+def delete_shipment(request, shipment_id):
+    """删除发货单及其关联的物品"""
+    try:
+        shipment = get_object_or_404(ShipmentOrder, pk=shipment_id)
+        
+        # 获取所有关联的物品
+        items = shipment.items.select_related('product').all()
+        
+        # 根据发货单状态更新产品数据
+        for item in items:
+            product = item.product
+            item_quantity = Decimal(str(item.quantity))
+            item_purchase_cost = Decimal(str(item.purchase_cost))
+            item_shipping_cost = Decimal(str(item.shipping_cost))
             
-            # 根据发货单状态更新产品库存和货值
             if shipment.status == '在途':
-                for item in items:
-                    product = item.product
-                    # 减少在途库存
-                    product.stock_in_transit = max(0, product.stock_in_transit - item.quantity)
-                    # 减少在途货值
-                    product.value_in_transit = max(Decimal('0.00'), 
-                        product.value_in_transit - (item.purchase_cost * Decimal(str(item.quantity))))
-                    product.value_in_transit = product.value_in_transit.quantize(Decimal('0.01'))
-                    # 更新总库存和总货值
-                    product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
-                    product.total_value = product.value_in_warehouse + product.value_arrived + product.value_in_transit
-                    product.save()
+                # 减少在途数量和货值
+                product.stock_in_transit = max(0, product.stock_in_transit - item.quantity)
+                transit_value_reduction = item_purchase_cost * item_quantity
+                product.value_in_transit = max(Decimal('0.00'), 
+                    product.value_in_transit - transit_value_reduction)
+                
             elif shipment.status == '到岸':
-                for item in items:
-                    product = item.product
-                    # 减少到岸库存
-                    product.stock_arrived = max(0, product.stock_arrived - item.quantity)
-                    # 减少到岸货值（包含头程成本）
-                    item_value = (item.purchase_cost + item.shipping_cost) * Decimal(str(item.quantity))
-                    product.value_arrived = max(Decimal('0.00'), 
-                        product.value_arrived - item_value)
-                    product.value_arrived = product.value_arrived.quantize(Decimal('0.01'))
-                    # 更新总库存和总货值
-                    product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
-                    product.total_value = product.value_in_warehouse + product.value_arrived + product.value_in_transit
-                    product.save()
+                # 减少到岸数量和货值
+                product.stock_arrived = max(0, product.stock_arrived - item.quantity)
+                arrived_value_reduction = (item_purchase_cost + item_shipping_cost) * item_quantity
+                product.value_arrived = max(Decimal('0.00'), 
+                    product.value_arrived - arrived_value_reduction)
             
-            # 删除发货单
-            batch_number = shipment.batch_number  # 保存批次号用于消息提示
-            shipment.delete()
-            messages.success(request, f'发货单 {batch_number} 已成功删除')
-            return redirect('shipment_list')
+            # 更新总库存和总货值
+            product.stock = (product.stock_in_warehouse + 
+                           product.stock_arrived + 
+                           product.stock_in_transit)
             
-        except Exception as e:
-            messages.error(request, f'删除发货单时出错: {str(e)}')
-            return render(request, 'erp/shipment/delete.html', {'shipment': shipment})
+            product.total_value = (product.value_in_warehouse + 
+                                 product.value_arrived + 
+                                 product.value_in_transit)
+            
+            # 确保货值不会出现负数，并保留两位小数
+            product.total_value = max(Decimal('0.00'), 
+                product.total_value).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+            
+            product.save()
+        
+        # 删除发货单（会级联删除关联的物品）
+        shipment.delete()
+        messages.success(request, '发货单及其关联物品已成功删除')
+        
+    except Exception as e:
+        messages.error(request, f'删除发货单时出错：{str(e)}')
     
-    return render(request, 'erp/shipment/delete.html', {'shipment': shipment})
+    return redirect('shipment_list')
 
 
 def inventory_edit(request, pk):
@@ -1278,6 +1325,12 @@ def import_inventory(request):
             for product in products:
                 product.stock_in_warehouse = 0
                 product.value_in_warehouse = Decimal('0.00')
+                # 更新总库存和总货值
+                product.stock = product.stock_arrived + product.stock_in_transit
+                product.total_value = (
+                    product.value_arrived + 
+                    product.value_in_transit
+                ).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
                 product.save()
             
             # 处理数据
@@ -1310,7 +1363,7 @@ def import_inventory(request):
                                 shop, _ = Shop.objects.get_or_create(name=standard_shop_name)
                                 shop_cache[standard_shop_name] = shop
                     
-                    # 处理采购成本 - 确保有默认值
+                    # 处理采购成本和头程成本
                     purchase_cost = Decimal('0.00')
                     if pd.notna(row.get('采购成本')):
                         try:
@@ -1318,7 +1371,6 @@ def import_inventory(request):
                         except (ValueError, TypeError, InvalidOperation):
                             purchase_cost = Decimal('0.00')
                     
-                    # 处理头程成本 - 确保有默认值
                     shipping_cost = Decimal('0.00')
                     if pd.notna(row.get('头程成本')):
                         try:
@@ -1326,22 +1378,8 @@ def import_inventory(request):
                         except (ValueError, TypeError, InvalidOperation):
                             shipping_cost = Decimal('0.00')
                     
-                    # 处理重量字段
-                    weight_value = Decimal('0.00')
-                    if pd.notna(row.get('重量')):
-                        try:
-                            weight_value = Decimal(str(row['重量'])).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
-                        except (ValueError, TypeError, InvalidOperation):
-                            weight_value = Decimal('0.00')
-                    
-                    # 处理体积字段
-                    volume_value = '0'
-                    if pd.notna(row.get('体积')):
-                        volume_value = str(row['体积'])
-                    
                     # 获取或创建产品
                     try:
-                        # 尝试获取现有产品
                         product = Product.objects.get(sku=sku)
                         
                         # 更新产品的基本信息
@@ -1353,49 +1391,37 @@ def import_inventory(request):
                         # 更新采购成本和头程成本
                         product.purchase_cost = purchase_cost
                         product.shipping_cost = shipping_cost
-                        product.weight = weight_value
-                        product.volume = volume_value
+                        
+                        # 更新在库数量和货值
+                        product.stock_in_warehouse = quantity
+                        product.value_in_warehouse = (purchase_cost + shipping_cost) * Decimal(str(quantity))
+                        product.value_in_warehouse = product.value_in_warehouse.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                        
+                        # 更新总库存和总货值
+                        product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
+                        product.total_value = (
+                            product.value_in_warehouse + 
+                            product.value_arrived + 
+                            product.value_in_transit
+                        ).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
+                        
+                        product.save()
+                        success_count += 1
                         
                     except Product.DoesNotExist:
-                        # 获取必填字段的默认值
-                        chinese_name = str(row['中文名称']) if pd.notna(row['中文名称']) else ''
-                        
-                        # 创建新产品，只设置实际存在的字段
-                        product = Product(
+                        # 创建新产品
+                        product = Product.objects.create(
                             sku=sku,
-                            chinese_name=chinese_name,
+                            chinese_name=str(row['中文名称']) if pd.notna(row['中文名称']) else '',
                             purchase_cost=purchase_cost,
                             shipping_cost=shipping_cost,
                             shop=shop,
-                            weight=weight_value,
-                            volume=volume_value,
-                            stock_in_warehouse=0,
-                            stock_arrived=0,
-                            stock_in_transit=0,
-                            stock=0,
-                            value_in_warehouse=Decimal('0.00'),
-                            value_arrived=Decimal('0.00'),
-                            value_in_transit=Decimal('0.00'),
-                            total_value=Decimal('0.00')
+                            stock_in_warehouse=quantity,
+                            value_in_warehouse=(purchase_cost + shipping_cost) * Decimal(str(quantity)),
+                            stock=quantity,
+                            total_value=(purchase_cost + shipping_cost) * Decimal(str(quantity))
                         )
-                        product.save()
-                    
-                    # 更新产品在库数量和货值
-                    product.stock_in_warehouse = product.stock_in_warehouse + quantity
-                    
-                    # 计算在库货值（采购成本 + 头程成本）× 数量
-                    product.value_in_warehouse = (purchase_cost + shipping_cost) * Decimal(str(quantity))
-                    product.value_in_warehouse = product.value_in_warehouse.quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
-                    
-                    # 更新总库存
-                    product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
-                    
-                    # 更新总货值
-                    product.total_value = product.value_in_warehouse + product.value_arrived + product.value_in_transit
-                    
-                    # 保存产品
-                    product.save()
-                    success_count += 1
+                        success_count += 1
                     
                 except Exception as e:
                     error_count += 1
