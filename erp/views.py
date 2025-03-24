@@ -845,10 +845,12 @@ def delete_shipment(request, pk):
     
     if request.method == 'POST':
         try:
-            # 如果发货单状态为"在途"，需要更新产品的在途库存和货值
+            # 使用 select_related 优化查询
+            items = shipment.items.select_related('product').all()
+            
+            # 根据发货单状态更新产品库存和货值
             if shipment.status == '在途':
-                # 使用 select_related 优化查询
-                for item in shipment.items.select_related('product').all():
+                for item in items:
                     product = item.product
                     # 减少在途库存
                     product.stock_in_transit = max(0, product.stock_in_transit - item.quantity)
@@ -856,6 +858,23 @@ def delete_shipment(request, pk):
                     product.value_in_transit = max(Decimal('0.00'), 
                         product.value_in_transit - (item.purchase_cost * Decimal(str(item.quantity))))
                     product.value_in_transit = product.value_in_transit.quantize(Decimal('0.01'))
+                    # 更新总库存和总货值
+                    product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
+                    product.total_value = product.value_in_warehouse + product.value_arrived + product.value_in_transit
+                    product.save()
+            elif shipment.status == '到岸':
+                for item in items:
+                    product = item.product
+                    # 减少到岸库存
+                    product.stock_arrived = max(0, product.stock_arrived - item.quantity)
+                    # 减少到岸货值（包含头程成本）
+                    item_value = (item.purchase_cost + item.shipping_cost) * Decimal(str(item.quantity))
+                    product.value_arrived = max(Decimal('0.00'), 
+                        product.value_arrived - item_value)
+                    product.value_arrived = product.value_arrived.quantize(Decimal('0.01'))
+                    # 更新总库存和总货值
+                    product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
+                    product.total_value = product.value_in_warehouse + product.value_arrived + product.value_in_transit
                     product.save()
             
             # 删除发货单
