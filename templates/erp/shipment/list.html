@@ -46,7 +46,7 @@
                         <a href="{% url 'shipment_detail' pk=shipment.id %}" class="btn btn-info btn-sm">详情</a>
                         <a href="{% url 'export_shipment_detail' pk=shipment.id %}" class="btn btn-success btn-sm">导出</a>
                         <a href="{% url 'change_shipment_status' shipment_id=shipment.id %}" class="btn btn-warning btn-sm">到岸</a>
-                        <a href="{% url 'delete_shipment' pk=shipment.id %}" class="btn btn-danger btn-sm">删除</a>
+                        <a href="{% url 'delete_shipment' pk=shipment.id %}" class="btn btn-danger btn-sm" onclick="return confirm('确定要删除这个发货单吗？此操作不可恢复。')">删除</a>
                     </td>
                 </tr>
                 {% empty %}

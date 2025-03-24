@@ -135,6 +135,8 @@
             </div>
         </div>
     </div>
+
+    <a href="{% url 'delete_shipment' pk=shipment.id %}" class="btn btn-danger" onclick="return confirm('确定要删除这个发货单吗？此操作不可恢复。')">删除发货单</a>
 </div>
 {% endblock %}
 

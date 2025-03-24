@@ -883,58 +883,47 @@ def change_shipment_status(request, shipment_id):
     return render(request, 'erp/shipment/change_status.html', {'shipment': shipment})
 
 
-def delete_shipment(request, shipment_id):
-    """删除发货单及其关联的物品"""
+def delete_shipment(request, pk):
+    """删除发货单"""
     try:
-        shipment = get_object_or_404(ShipmentOrder, pk=shipment_id)
+        # 获取发货单
+        shipment = get_object_or_404(ShipmentOrder, id=pk)
+        batch_number = shipment.batch_number  # 保存批次号，供后续显示消息使用
         
-        # 获取所有关联的物品
+        # 获取发货单的所有商品条目
         items = shipment.items.select_related('product').all()
         
-        # 根据发货单状态更新产品数据
+        # 根据发货单状态更新产品库存和货值
         for item in items:
             product = item.product
-            item_quantity = Decimal(str(item.quantity))
-            item_purchase_cost = Decimal(str(item.purchase_cost))
-            item_shipping_cost = Decimal(str(item.shipping_cost))
+            quantity = item.quantity
             
             if shipment.status == '在途':
-                # 减少在途数量和货值
-                product.stock_in_transit = max(0, product.stock_in_transit - item.quantity)
-                transit_value_reduction = item_purchase_cost * item_quantity
+                # 在途状态：减少在途库存和在途货值
+                product.stock_in_transit = max(0, product.stock_in_transit - quantity)
                 product.value_in_transit = max(Decimal('0.00'), 
-                    product.value_in_transit - transit_value_reduction)
-                
+                                               product.value_in_transit - (Decimal(str(quantity)) * product.purchase_cost))
             elif shipment.status == '到岸':
-                # 减少到岸数量和货值
-                product.stock_arrived = max(0, product.stock_arrived - item.quantity)
-                arrived_value_reduction = (item_purchase_cost + item_shipping_cost) * item_quantity
-                product.value_arrived = max(Decimal('0.00'), 
-                    product.value_arrived - arrived_value_reduction)
+                # 到岸状态：减少到岸库存和到岸货值
+                product.stock_arrived = max(0, product.stock_arrived - quantity)
+                value_to_deduct = Decimal(str(quantity)) * (product.purchase_cost + product.shipping_cost)
+                product.value_arrived = max(Decimal('0.00'), product.value_arrived - value_to_deduct)
             
-            # 更新总库存和总货值
-            product.stock = (product.stock_in_warehouse + 
-                           product.stock_arrived + 
-                           product.stock_in_transit)
-            
-            product.total_value = (product.value_in_warehouse + 
-                                 product.value_arrived + 
-                                 product.value_in_transit)
-            
-            # 确保货值不会出现负数，并保留两位小数
-            product.total_value = max(Decimal('0.00'), 
-                product.total_value).quantize(Decimal('0.01'), rounding='ROUND_HALF_UP')
-            
+            # 重新计算总库存和总货值
+            product.stock = product.stock_in_warehouse + product.stock_arrived + product.stock_in_transit
+            product.total_value = (product.value_in_warehouse + product.value_arrived + product.value_in_transit).quantize(Decimal('0.01'))
             product.save()
         
-        # 删除发货单（会级联删除关联的物品）
+        # 删除发货单
         shipment.delete()
-        messages.success(request, '发货单及其关联物品已成功删除')
         
-    except Exception as e:
-        messages.error(request, f'删除发货单时出错：{str(e)}')
+        # 显示成功消息
+        messages.success(request, f'发货单 {batch_number} 已成功删除')
+        return redirect('shipment_list')
     
-    return redirect('shipment_list')
+    except Exception as e:
+        messages.error(request, f'删除失败：{str(e)}')
+        return redirect('shipment_list')
 
 
 def inventory_edit(request, pk):
